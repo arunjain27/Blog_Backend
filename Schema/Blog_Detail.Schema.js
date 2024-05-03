@@ -10,26 +10,27 @@ const Blog_Detail = new Schema({
     type:String,
     required: true
   },
-     title:{
-      type:String,
-      required: true
-    },
-     tag:{
-      type:String,
-      required: true
-    }, 
-     description:{
-      type:String,
-      required: true
-    }, 
-     image:{
-      type:String,
-      required: true
-    },
-  
+  title:{
+    type:String,
+    required: true
+  },
+  tag:{
+    type:String,
+    required: true
+  }, 
+  description:{
+    type:String,
+    required: true
+  }, 
+  image:{
+    type:String,
+    required: true
+  },
+  date: {
+    type: Date,
+    default: Date.now
+  }
+});
 
-    });
-
-    const Blog_Schema = mongoose.model('Blog_Detail', Blog_Detail);
-    module.exports = Blog_Schema;
-    
+const Blog_Schema = mongoose.model('Blog_Detail', Blog_Detail);
+module.exports = Blog_Schema;

@@ -1,5 +1,5 @@
 var jwt = require('jsonwebtoken');
-let private_key="iamarunjain";
+let private_key=process.env.PRIVATE_KEY;
 const Blog_Schema = require('../Schema/Blog_Detail.Schema');  
 const checkToken = (req, res, next) => {
  

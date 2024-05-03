@@ -1,6 +1,6 @@
 const cloudinary = require('cloudinary').v2;
-const CLOUD_NAME="ddwsgkubk";
-const API_KEY="633358693563128";
+const CLOUD_NAME=process.env.CLOUD_NAME;
+const API_KEY=process.env.API_KEY;
 const API_SECRET="R589QNOzVoPNRWFKQSE6RvD8XTU";
 cloudinary.config({
   cloud_name: `${CLOUD_NAME}`,
