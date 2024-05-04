@@ -11,14 +11,14 @@ const multer = require("multer");
 const fs = require("fs");
 // open AI
 const MODEL_NAME = process.env.MODEL_NAME;
-const API_KEY = process.env.API_KEY;
+const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
 const axios = require("axios");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 
-const numSaltRounds = 8;
+const numSaltRounds = 8; 
 const {
   loginValidator,
   createValidator,
@@ -310,7 +310,7 @@ async function improveText(prompt, text) {
       {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${API_KEY}`,
+          Authorization: `Bearer ${API_KEY_GEMINI}`,
         },
       }
     );
@@ -356,7 +356,7 @@ const {
 } = require("@google/generative-ai");
 
 // Initialize Google Generative AI client
-const genAI = new GoogleGenerativeAI(API_KEY); // Replace API_KEY with your actual API key
+const genAI = new GoogleGenerativeAI(API_KEY_GEMINI); // Replace API_KEY with your actual API key
 
 // Example post request handler
 router.post("/generateText", async (req, res) => {
