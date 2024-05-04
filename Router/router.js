@@ -28,6 +28,11 @@ app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', "font-src 'self' https://fonts.gstatic.com");
   next();
 });
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', "style-src 'self' https://fonts.googleapis.com");
+  next();
+});
+
 const cors = require("cors");
 app.use(express.json());
 app.use(cors());
