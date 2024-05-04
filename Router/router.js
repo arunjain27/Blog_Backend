@@ -23,6 +23,11 @@ const {
   loginValidator,
   createValidator,
 } = require("../Validator/Express_Validator.js");
+
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', "font-src 'self' https://fonts.gstatic.com");
+  next();
+});
 const cors = require("cors");
 app.use(express.json());
 app.use(cors());
