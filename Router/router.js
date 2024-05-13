@@ -64,7 +64,12 @@ const getImage = async (customData, count) => {
       max_results: 1, // Retrieve only the most recent image
       sort_by: "created_at", // Sort by creation date in descending order
       direction: "desc", // Sort in descending order
-    });
+      transformation: [
+        { width: 250, crop: "scale" }, // Apply width and crop transformation
+        { quality: 20 }, // Set image quality to 35
+        { fetch_format: "low" } // Automatically select optimal format
+      ] 
+    }); 
 
     // Check if there are any matching images
     if (result.resources.length > 0) {
