@@ -5,13 +5,13 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "type":"module",
-    "start":"nodemon index.js"
+    "type": "module",
+    "start": "nodemon index.js"
   },
   "author": "Arun Jain",
   "license": "ISC",
   "dependencies": {
-    "@google/generative-ai": "^0.8.0", 
+    "@google/generative-ai": "^0.8.0",
     "appwrite": "^14.0.1",
     "axios": "^1.6.8",
     "bcryptjs": "^2.4.3",
@@ -23,6 +23,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.4",
     "multer": "^1.4.5-lts.1",
+    "node-cache": "^5.1.2",
     "nodemon": "^3.0.2"
   }
 }

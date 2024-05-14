@@ -2,6 +2,8 @@ const Database_Connection = require("../Database_Connection/Db.js");
 Database_Connection(); //----  DATABASE_CONNECTION    ----//
 const express = require("express");
 const app = express();
+const NodeCache = require("node-cache");
+const cache = new NodeCache();
 const router = express.Router();
 const cloudinary = require("../Cloudinary/Cloudinary_Details.js"); //----  CLOUDINARY    ----//
 const User = require("../Schema/User.Schema.js"); //----   USER_SCHEMA    ----//
@@ -17,7 +19,6 @@ const path = require("path");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
-
 const numSaltRounds = 8; 
 const {
   loginValidator,
@@ -86,6 +87,8 @@ const getImage = async (customData, count) => {
   }
 };
 
+
+
 //----  SIGNUP REQUEST    ----//
 
 router.post("/signup", createValidator, async (req, res) => {
@@ -134,6 +137,7 @@ router.post("/signin", loginValidator, async (req, res) => {
 
     if (users) {
       let user_password = users.password;
+      let user_name=users.name;
       const result = user_password == password ? true : false;
       console.log(result);
 
@@ -147,7 +151,7 @@ router.post("/signin", loginValidator, async (req, res) => {
 
         let token = jwt.sign(data, PRIVATE_KEY);
 
-        res.json({ data: token });
+        res.json({ data:token  ,username:user_name });
       } else {
         res.send("incorrect password");
       }

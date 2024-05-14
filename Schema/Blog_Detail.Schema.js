@@ -31,6 +31,10 @@ const Blog_Detail = new Schema({
     default: Date.now
   }
 });
+Blog_Detail.index({ user: 1 });
+
+// Indexing the 'date' field for sorting blogs by date more efficiently
+Blog_Detail.index({ date: -1 });
 
 const Blog_Schema = mongoose.model('Blog_Detail', Blog_Detail);
 module.exports = Blog_Schema;
