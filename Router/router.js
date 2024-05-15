@@ -224,6 +224,21 @@ router.post("/blogdetail",Middleware_fun,upload.single("image"),async (req, res)
   }
 );
 
+const cacheMiddleware = (req, res, next) => {
+  const key = req.originalUrl || req.url;
+  const cachedData = cache.get(key);
+  if (cachedData) {
+    res.json(cachedData);
+    return;
+  }
+  res.sendResponse = res.json;
+  res.json = (body) => {
+    cache.set(key, body, 60); // Cache for 60 seconds
+    res.sendResponse(body);
+  };
+  next();
+};
+
 //----   ALL_DATA REQUEST   ----//
 
 router.post("/get", Middleware_fun, async (req, res) => {
@@ -250,8 +265,10 @@ router.post("/get", Middleware_fun, async (req, res) => {
   }
 });
 
+
+
 // all the blog post
-router.post("/allpost", Middleware_fun, async (req, res) => {
+router.post("/allpost", cacheMiddleware,Middleware_fun, async (req, res) => {
   try {
     let userid = req.user;
     let finalname = "none";
@@ -274,18 +291,36 @@ router.post("/allpost", Middleware_fun, async (req, res) => {
 
 // -----  DELETE  REQUEST    -----//
 
+const deleteImageFromCloudinary = async (publicId) => {
+  try {
+    // Delete the image using the public ID
+    const result = await cloudinary.uploader.destroy(publicId);
+    console.log(result);
+  } catch (error) {
+    console.error('Error deleting image:', error);
+  }
+};
+
+
 router.delete("/:id", async (req, res) => {
   try {
+    // Find the blog post in the database
     const id = req.params.id;
-    console.log(id);
-
-    const delete_Element = await Blog_Schema.deleteOne({ _id: id });
-    res.send(delete_Element);
+    const blogPost = await Blog_Schema.findOne({ _id: id });
+  
+    // Extract the public ID from the URL (assuming the URL is stored in a field called imageUrl)
+    const url = blogPost.image;
+    const publicId = url.substring(url.lastIndexOf('/') + 1, url.lastIndexOf('.'));
+    
+    // Delete the image from Cloudinary
+    await deleteImageFromCloudinary(publicId); 
+    const deletepost = await Blog_Schema.deleteOne({ _id: id });
+   
+    res.json({success:true})
   } catch (error) {
-    console.error("Error occurred:", error);
-    res.status(500).send("An error occurred");
-  }
-});
+    console.error('Error fetching blog post or deleting image:', error);
+    res.json({success:false})
+  }});
 
 // -----  UPDATE  REQUEST    -----//
 
