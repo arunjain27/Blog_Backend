@@ -10,6 +10,8 @@ const User = require("../Schema/User.Schema.js"); //----   USER_SCHEMA    ----//
 const Blog_Schema = require("../Schema/Blog_Detail.Schema.js"); //----   BLOG_SCHEMA    ----//
 const Middleware_fun = require("../middleware/Auth_User.js"); //----   MIDDLEWARE    ----//
 const multer = require("multer");
+const compression = require("compression");
+app.use(compression());
 const fs = require("fs");
 // open AI
 const MODEL_NAME = process.env.MODEL_NAME;
@@ -33,6 +35,8 @@ app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', "style-src 'self' https://fonts.googleapis.com");
   next();
 });
+
+
 
 const cors = require("cors");
 app.use(express.json());
