@@ -12,6 +12,16 @@ const Middleware_fun = require("../middleware/Auth_User.js"); //----   MIDDLEWAR
 const multer = require("multer");
 const compression = require("compression");
 app.use(compression());
+app.use(compression({ filter: shouldCompress }));
+
+function shouldCompress(req, res) {
+  if (req.headers['x-no-compression']) {
+    // Don't compress responses with this request header
+    return false;
+  }
+  // Compress all other responses
+  return compression.filter(req, res);
+}
 const fs = require("fs");
 // open AI
 const MODEL_NAME = process.env.MODEL_NAME;
