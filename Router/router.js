@@ -1,14 +1,15 @@
 const Database_Connection = require("../Database_Connection/Db.js");
-Database_Connection(); //----  DATABASE_CONNECTION    ----//
+Database_Connection();                                                //---- DATABASE_CONNECTION  ----//
 const express = require("express");
 const app = express();
 const NodeCache = require("node-cache");
 const cache = new NodeCache();
 const router = express.Router();
-const cloudinary = require("../Cloudinary/Cloudinary_Details.js"); //----  CLOUDINARY    ----//
-const User = require("../Schema/User.Schema.js"); //----   USER_SCHEMA    ----//
-const Blog_Schema = require("../Schema/Blog_Detail.Schema.js"); //----   BLOG_SCHEMA    ----//
-const Middleware_fun = require("../middleware/Auth_User.js"); //----   MIDDLEWARE    ----//
+const cloudinary = require("../Cloudinary/Cloudinary_Details.js");   //----  CLOUDINARY      ----//
+const User = require("../Schema/User.Schema.js");                   //----   USER_SCHEMA    ----//
+const Blog_Schema = require("../Schema/Blog_Detail.Schema.js");    //----   BLOG_SCHEMA    ----//
+const Comment=require("../Schema/Comment_Schema.js")
+const Middleware_fun = require("../middleware/Auth_User.js");    //----   MIDDLEWARE     ----//
 const multer = require("multer");
 const compression = require("compression");
 app.use(compression());
@@ -128,7 +129,7 @@ router.post("/signup", createValidator, async (req, res) => {
 
     let token = jwt.sign(data,PRIVATE_KEY);
 
-    res.json({ data: token });
+    res.json({ data:token ,username:Username,userid:UserId });
   } catch (error) {
     console.log("Error occurred:", error);
     res.status(500).send("An error occurred");
@@ -165,7 +166,7 @@ router.post("/signin", loginValidator, async (req, res) => {
 
         let token = jwt.sign(data, PRIVATE_KEY);
 
-        res.json({ data:token  ,username:user_name });
+        res.json({ data:token  ,username:user_name,userid:UserId });
       } else {
         res.send("incorrect password");
       }
@@ -338,32 +339,72 @@ router.delete("/:id", async (req, res) => {
 
 // -----  UPDATE  REQUEST    -----//
 
-router.put("/update/:id", async (req, res) => {
+router.get('/blog/:id', async (req, res) => {
   try {
-    console.log(req.params.id);
-    const Obj_Id = await Blog_Schema.findOne({ _id: req.params.id });
+    const blogId = req.params.id;
 
-    if (!Obj_Id) {
-      res.send("NO OBJECT IS EXIST FOR UPDATE");
-    }
-    const { title, tag, description } = req.body;
+    // Fetch blog by ID and populate the user field
+    const blog = await Blog_Schema.findById(blogId)
+      .populate('user', 'name')  // Only include 'name' from user
+      .exec();
 
-    if (title) {
-      Obj_Id.title = title;
-    }
-    if (tag) {
-      Obj_Id.description = description;
+    if (!blog) {
+      return res.status(404).json({ message: 'Blog not found' });
     }
 
-    if (description) {
-      Obj_Id.description = description;
-    }
+    // Fetch comments related to the blog and populate user field
+    const comments = await Comment.find({ blog: blogId })
+      .populate('user', 'name')  // Only include 'name' from user
+      .exec();
 
-    const update = await Blog_Schema.updateOne({ _id: req.params.id }, Obj_Id);
-    res.send(update);
-  } catch (error) {}
+    // Construct the response
+    const response = {
+      blog: {
+        _id: blog._id,
+        name: blog.name,
+        title: blog.title,
+        tag: blog.tag,
+        description: blog.description,
+        image: blog.image,
+        date: blog.date,
+        likes: blog.likes.length,  // Count the number of likes
+        dislikes: blog.dislikes.length,  // Count the number of dislikes
+        comments: comments.map(comment => ({
+          _id: comment._id,
+          text: comment.text,
+          date: comment.date,
+          likes: comment.likes.length,  // Count the number of likes
+          dislikes: comment.dislikes.length,  // Count the number of dislikes
+          user: comment.user // Include the name of the user who commented
+        }))
+      }
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching blog by ID:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
 });
+// Update a comment
+router.put('/:id', Middleware_fun, async (req, res) => {
+  try {
+    const { text } = req.body;
+    const comment = await Comment.findById(req.params.id);
+    if (!comment) return res.status(404).json({ message: 'Comment not found' });
 
+    // Check if the user is the author of the comment
+    if (comment.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    comment.text = text;
+    const updatedComment = await comment.save();
+    res.json({ comment: updatedComment });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 // genereate Ai text function
 
 async function improveText(prompt, text) {
@@ -427,6 +468,82 @@ const {
 const genAI = new GoogleGenerativeAI(API_KEY_GEMINI); // Replace API_KEY with your actual API key
 
 // Example post request handler
+
+
+// -----  EDIT COMMENT REQUEST  ----- //
+// ----- UPDATE COMMENT REQUEST ----- //
+router.put('/comment/:id', Middleware_fun, async (req, res) => {
+  try {
+    const commentId = req.params.id;
+    const userId = req.user;
+    const { text } = req.body;
+
+    // Find the comment
+    const comment = await Comment.findById(commentId);
+
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    // Check if the user is the author of the comment
+    if (comment.user.toString() !== userId.toString()) {
+      return res.status(403).json({ message: 'Not authorized to edit this comment' });
+    }
+
+    // Update the comment text
+    comment.text = text;
+    await comment.save();
+
+    res.status(200).json({ message: 'Comment updated successfully', comment });
+  } catch (error) {
+    console.error('Error updating comment:', error);
+    res.status(500).json({ message: 'An error occurred' });
+  }
+});
+
+
+// -----  DELETE COMMENT REQUEST  ----- //
+// ----- DELETE COMMENT REQUEST ----- //
+// Delete a comment
+router.delete('/comment/:id', Middleware_fun, async (req, res) => {
+  try {
+    // Find and populate comment
+    const comment = await Comment.findById(req.params.id).populate('user');
+    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+
+    // Ensure req.user is set and comment.user is populated
+    if (!req.user || !comment.user) {
+      return res.status(400).json({ message: 'User or comment not found' });
+    }
+ 
+    // Check if the user is the author of the comment
+    if (comment.user._id.toString() !== req.user.toString()) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    // Use findByIdAndDelete to remove the comment
+    await Comment.findByIdAndDelete(req.params.id);
+
+    res.json({ message: 'Comment removed' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+
+router.get('/:id', async (req, res) => {
+  try {
+    const blog = await Blog.findById(req.params.id)
+      .populate({
+        path: 'comments',
+        populate: { path: 'user', select: 'name' }  // Populate user details
+      });
+
+    res.json({ blog });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 router.post("/generateText", async (req, res) => {
   try {
     const { title, tag, description } = req.body;
@@ -448,7 +565,192 @@ router.post("/generateText", async (req, res) => {
     res.status(500).json({ error: "An error occurred" });
   }
 });
+router.post("/like", Middleware_fun, async (req, res) => {
+  try {
+    const { blogId } = req.body;
+    const userId = req.user;
 
+    if (!userId || userId === "none") {
+      return res.status(401).json({ message: 'Unauthorized user' });
+    }
+
+    const blogPost = await Blog_Schema.findById(blogId);
+
+    if (!blogPost) {
+      return res.status(404).json({ message: 'Blog post not found' });
+    }
+
+    const alreadyLiked = blogPost.likes.includes(userId);
+    const alreadyDisliked = blogPost.dislikes.includes(userId);
+
+    if (alreadyLiked) {
+      // Remove like and decrement likes count
+      blogPost.likes = blogPost.likes.filter(id => id.toString() !== userId.toString());
+      if (alreadyDisliked) {
+        // If disliked, remove dislike
+        blogPost.dislikes = blogPost.dislikes.filter(id => id.toString() !== userId.toString());
+      }
+    } else {
+      // Add like and increment likes count
+      blogPost.likes.push(userId);
+      if (alreadyDisliked) {
+        // If disliked, remove dislike
+        blogPost.dislikes = blogPost.dislikes.filter(id => id.toString() !== userId.toString());
+      }
+    }
+
+    await blogPost.save();
+    res.status(200).json({
+      message: 'Blog updated',
+      blog: {
+        _id: blogPost._id,
+        likes: blogPost.likes.length,
+        dislikes: blogPost.dislikes.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error occurred:", error);
+    res.status(500).send("An error occurred");
+  }
+});
+
+router.post('/comment', Middleware_fun, async (req, res) => {
+  try {
+    console.log('Request user:', req.user);  // Check if user is set
+
+    const { blogId, text } = req.body;
+    const userId = req.user; // Ensure userId is correctly retrieved from req.user
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized user' });
+    }
+
+    if (!blogId || !text) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    // Create and save the new comment
+    const newComment = new Comment({
+      blog: blogId,
+      user: userId,
+      text
+    });
+
+    await newComment.save();
+    console.log("Comment saved");
+
+    // Optional: Update the blog post to include the new comment
+    // const blogPost = await Blog_Schema.findById(blogId);
+    // if (blogPost) {
+    //   blogPost.comments.push(newComment._id);
+    //   await blogPost.save();
+    // }
+
+    res.status(201).json({ comment: newComment });
+  } catch (error) {
+    console.error("Error occurred:", error);
+    res.status(500).json({ message: 'An error occurred', error: error.message });
+  }
+});
+
+
+router.post("/like-dislike-comment", Middleware_fun, async (req, res) => {
+  try {
+    const { commentId, type } = req.body;
+    const userId = req.user;
+
+    const comment = await Comment.findById(commentId);
+
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    const alreadyLiked = comment.likes.includes(userId);
+    const alreadyDisliked = comment.dislikes.includes(userId);
+
+    if (type === 'like') {
+      if (alreadyLiked) {
+        comment.likes = comment.likes.filter(id => id.toString() !== userId.toString());
+      } else {
+        comment.likes.push(userId);
+        if (alreadyDisliked) {
+          comment.dislikes = comment.dislikes.filter(id => id.toString() !== userId.toString());
+        }
+      }
+    } else if (type === 'dislike') {
+      if (alreadyDisliked) {
+        comment.dislikes = comment.dislikes.filter(id => id.toString() !== userId.toString());
+      } else {
+        comment.dislikes.push(userId);
+        if (alreadyLiked) {
+          comment.likes = comment.likes.filter(id => id.toString() !== userId.toString());
+        }
+      }
+    }
+
+    await comment.save();
+    res.status(200).json({
+      comment: {
+        _id: comment._id,
+        likes: comment.likes.length,
+        dislikes: comment.dislikes.length,
+        text: comment.text, // Ensure text is included
+        date: comment.date, // Ensure date is included
+      },
+    });
+  } catch (error) {
+    console.error("Error occurred:", error);
+    res.status(500).send("An error occurred");
+  }
+});
+
+router.get("/notifications", Middleware_fun, async (req, res) => {
+  try {
+    const userId = req.user;
+
+    const notifications = await Notification.find({ user: userId }).sort({ date: -1 });
+
+    res.status(200).json({ notifications });
+  } catch (error) {
+    console.error("Error occurred:", error);
+    res.status(500).send("An error occurred");
+  }
+});
+
+router.put('/update/:id', Middleware_fun, async (req, res) => {
+  const blogId = req.params.id;
+  const { title, tag, description} = req.body;
+
+  try {
+    // Find the blog post by ID
+    const blog = await Blog_Schema.findById(blogId);
+
+    if (!blog) {
+      return res.status(404).json({ message: 'Blog not found' });
+    }
+
+    // Check if the logged-in user is the author of the blog
+    if (blog.user.toString() !== req.user.toString()) {
+      return res.status(403).json({ message: 'Not authorized to update this blog' });
+    }
+
+    // Update the blog fields
+    blog.title = title || blog.title;
+    blog.tag = tag || blog.tag;
+    blog.description = description || blog.description;
+    // Set the updated date to current time
+
+    // Save the updated blog
+    const updatedBlog = await blog.save();
+
+    res.json({
+      message: 'Blog updated successfully',
+      blog: updatedBlog
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 // Function to generate creative text
 async function generateCreativeText(title, tag, description) {
   try {
