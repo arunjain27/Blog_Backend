@@ -51,8 +51,7 @@ app.use((req, res, next) => {
 
 const cors = require("cors");
 app.use(express.json());
-app.use(cors({
-  origin: "https://musingsss.netlify.app/"}));//----  STORAGE FUNCTION    ----//
+app.use(cors());//----  STORAGE FUNCTION    ----//
 
   const express_validator = require("express-validator");
 
