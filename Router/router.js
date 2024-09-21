@@ -201,14 +201,13 @@ router.post("/blogdetail",Middleware_fun,upload.single("image"),async (req, res)
 
       cloudinary.uploader.upload(
         imageUrl,
-        {
-          context: customData,
-        },
+        { context: customData },
         async (error, result) => {
           if (error) {
-            console.error("Error uploading image:", error);
-            return res.status(500).json({ message: "An error occurred" });
-          } else {
+            console.error("Error uploading image to Cloudinary:", error);
+            return res.status(500).json({ message: "Image upload failed" });
+          }
+          else {
             const imageUrl = await getImage(customData);
             const blogDetail = new Blog_Schema({
               user: User_id,
