@@ -23,6 +23,8 @@ function shouldCompress(req, res) {
   // Compress all other responses
   return compression.filter(req, res);
 }
+
+
 const fs = require("fs");
 // open AI
 const MODEL_NAME = process.env.MODEL_NAME;
@@ -47,12 +49,15 @@ app.use((req, res, next) => {
   next();
 });
 
-
-
 const cors = require("cors");
 app.use(express.json());
-app.use(cors());
-//----  STORAGE FUNCTION    ----//
+app.use(express.urlencoded({ extended: true }));
+
+app.use(cors({
+  origin: "https://musingsss.netlify.app/", 
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true
+}));//----  STORAGE FUNCTION    ----//
 const express_validator = require("express-validator");
 
 const validationResult = express_validator.validationResult;
@@ -105,6 +110,10 @@ const getImage = async (customData, count) => {
 
 
 //----  SIGNUP REQUEST    ----//
+router.get('*', (req, res) => {
+  res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
+});
+
 
 router.post("/signup", createValidator, async (req, res) => {
   try {
@@ -127,7 +136,7 @@ router.post("/signup", createValidator, async (req, res) => {
       name: Username,
     };
 
-    let token = jwt.sign(data,PRIVATE_KEY);
+    let token = jwt.sign(data, PRIVATE_KEY, { expiresIn: '1h' }); // Token expires in 1 hour
 
     res.json({ data:token ,username:Username,userid:UserId });
   } catch (error) {
