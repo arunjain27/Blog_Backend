@@ -52,7 +52,6 @@ app.use((req, res, next) => {
 const cors = require("cors");
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
 app.use(cors({
   origin: "https://musingsss.netlify.app/", 
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
@@ -110,11 +109,7 @@ const getImage = async (customData, count) => {
 
 
 //----  SIGNUP REQUEST    ----//
-router.get('*', (req, res) => {
-  res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
-});
-
-
+ 
 router.post("/signup", createValidator, async (req, res) => {
   try {
     const { name, email, password } = req.body;
