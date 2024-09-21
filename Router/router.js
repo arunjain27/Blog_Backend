@@ -23,8 +23,6 @@ function shouldCompress(req, res) {
   // Compress all other responses
   return compression.filter(req, res);
 }
-
-
 const fs = require("fs");
 // open AI
 const MODEL_NAME = process.env.MODEL_NAME;
@@ -49,11 +47,13 @@ app.use((req, res, next) => {
   next();
 });
 
+
+
 const cors = require("cors");
 app.use(express.json());
-app.use(cors());//----  STORAGE FUNCTION    ----//
-
-  const express_validator = require("express-validator");
+app.use(cors());
+//----  STORAGE FUNCTION    ----//
+const express_validator = require("express-validator");
 
 const validationResult = express_validator.validationResult;
 
@@ -105,7 +105,7 @@ const getImage = async (customData, count) => {
 
 
 //----  SIGNUP REQUEST    ----//
- 
+
 router.post("/signup", createValidator, async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -127,7 +127,7 @@ router.post("/signup", createValidator, async (req, res) => {
       name: Username,
     };
 
-    let token = jwt.sign(data, PRIVATE_KEY, { expiresIn: '1h' }); // Token expires in 1 hour
+    let token = jwt.sign(data,PRIVATE_KEY);
 
     res.json({ data:token ,username:Username,userid:UserId });
   } catch (error) {
