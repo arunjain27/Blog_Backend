@@ -11,6 +11,8 @@ const Blog_Schema = require("../Schema/Blog_Detail.Schema.js");    //----   BLOG
 const Comment=require("../Schema/Comment_Schema.js")
 const Middleware_fun = require("../middleware/Auth_User.js");    //----   MIDDLEWARE     ----//
 const multer = require("multer");
+const { Readable } = require('stream'); // Import Readable stream
+
 const compression = require("compression");
 app.use(compression());
 app.use(compression({ filter: shouldCompress }));
@@ -55,17 +57,17 @@ const express_validator = require("express-validator");
 
 const validationResult = express_validator.validationResult;
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Uploads will be stored in the 'uploads/' directory
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
+// const storage = multer.diskStorage({
+//   destination: (req, file, cb) => {
+//     cb(null, "uploads/"); // Uploads will be stored in the 'uploads/' directory
+//   },
+//   filename: (req, file, cb) => {
+//     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+//     cb(null, uniqueSuffix + path.extname(file.originalname));
+//   },
+// });
 
-const upload = multer({ storage: storage });
+// const upload = multer({ storage: storage });
 
 //----  GETIMAGE FUNCTION    ----//
 
@@ -178,58 +180,63 @@ router.post("/signin", loginValidator, async (req, res) => {
 });
 
 //----   BLOG_DETAIL REQUEST   ----//
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 router.post("/blogdetail", Middleware_fun, upload.single("image"), async (req, res) => {
   try {
-    // Check if the file is uploaded
+    console.log("Request body:", req.body);
+    console.log("Uploaded file:", req.file);
+
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded." });
     }
 
-    const User_id = req.user;
-    const User_name = req.name;
-
     const { title, tag, description } = req.body;
 
-    // Check if required fields are provided
     if (!title || !description || !tag) {
-      return res.status(400).json({ message: "Title, description, and tag are required." });
+      return res.status(400).json({ message: "All fields are required." });
     }
 
-    const customData = {
-      user_id: `${User_id}`,
-      category: "profile",
-    };
+    // Create a readable stream from the buffer
+    const stream = new Readable();
+    stream.push(req.file.buffer);
+    stream.push(null); // Indicates the end of the stream
 
-    const imageUrl = req.file.path;
+    // Upload to Cloudinary from memory
+    const uploadStream = cloudinary.uploader.upload_stream(async (error, result) => {
+      if (error) {
+        console.error("Cloudinary upload error:", error);
+        return res.status(500).json({ message: "Image upload failed", error: error.message });
+      }
 
-    // Upload image to Cloudinary
-    const cloudinaryResult = await cloudinary.uploader.upload(imageUrl, { context: customData });
+      const blogDetail = new Blog_Schema({
+        user: req.user,
+        name: req.name,
+        title,
+        tag,
+        description,
+        image: result.secure_url, // Use the URL returned by Cloudinary
+      });
 
-    const blogDetail = new Blog_Schema({
-      user: User_id,
-      name: User_name,
-      title,
-      tag,
-      description,
-      image: cloudinaryResult.secure_url, // Use the secure URL from Cloudinary
-    });
-
-    const savedBlogDetail = await blogDetail.save();
-
-    // Delete local image after upload
-    fs.unlink(req.file.path, (err) => {
-      if (err) {
-        console.error("Error deleting image:", err);
+      try {
+        const savedBlogDetail = await blogDetail.save();
+        res.status(201).json({ blogdetail: savedBlogDetail });
+      } catch (err) {
+        console.error("Error saving blog detail:", err);
+        res.status(500).json({ message: "Failed to save blog detail", error: err.message });
       }
     });
 
-    res.status(201).json({ blogdetail: savedBlogDetail });
+    // Pipe the file buffer to Cloudinary
+    stream.pipe(uploadStream);
+
   } catch (error) {
-    console.error("Error occurred in blogdetail route:", error);
-    res.status(500).json({ message: "An error occurred while adding the blog.", error: error.message });
+    console.error("Error in blogdetail route:", error);
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 });
+
 
 // Cache middleware
 const cacheMiddleware = (req, res, next) => {
