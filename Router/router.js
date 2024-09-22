@@ -179,69 +179,64 @@ router.post("/signin", loginValidator, async (req, res) => {
 
 //----   BLOG_DETAIL REQUEST   ----//
 
-router.post("/blogdetail",Middleware_fun,upload.single("image"),async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded." });
-      }
-
-      const User_id = req.user;
-      const User_name = req.name;
-
-      const { title, tag, description } = req.body;
-
-      const customData = {
-        user_id: `${User_id}`,
-        category: "profile",
-      };
-
-      const imageUrl = req.file.path;
-
-      cloudinary.uploader.upload(
-        imageUrl,
-        { context: customData },
-        async (error, result) => {
-          if (error) {
-            console.error("Error uploading image to Cloudinary:", error);
-            return res.status(500).json({ message: "Image upload failed" });
-          }
-          else {
-            const imageUrl = await getImage(customData);
-            const blogDetail = new Blog_Schema({
-              user: User_id,
-              name: User_name,
-              title,
-              tag,
-              description,
-              image: imageUrl,
-            });
-
-            const savedBlogDetail = await blogDetail.save();
-
-            fs.unlink(req.file.path, (err) => {
-              if (err) {
-                console.error("Error deleting image:", err);
-              } else {
-                console.log("Image deleted successfully");
-              }
-            });
-            res.status(201).json({ blogdetail: savedBlogDetail });
-          }
-        }
-      );
-    } catch (error) {
-      console.error("Error occurred:", error);
-      res.status(500).send("An error occurred");
+router.post("/blogdetail", Middleware_fun, upload.single("image"), async (req, res) => {
+  try {
+    // Check if the file is uploaded
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded." });
     }
-  }
-);
 
+    const User_id = req.user;
+    const User_name = req.name;
+
+    const { title, tag, description } = req.body;
+
+    // Check if required fields are provided
+    if (!title || !description || !tag) {
+      return res.status(400).json({ message: "Title, description, and tag are required." });
+    }
+
+    const customData = {
+      user_id: `${User_id}`,
+      category: "profile",
+    };
+
+    const imageUrl = req.file.path;
+
+    // Upload image to Cloudinary
+    const cloudinaryResult = await cloudinary.uploader.upload(imageUrl, { context: customData });
+
+    const blogDetail = new Blog_Schema({
+      user: User_id,
+      name: User_name,
+      title,
+      tag,
+      description,
+      image: cloudinaryResult.secure_url, // Use the secure URL from Cloudinary
+    });
+
+    const savedBlogDetail = await blogDetail.save();
+
+    // Delete local image after upload
+    fs.unlink(req.file.path, (err) => {
+      if (err) {
+        console.error("Error deleting image:", err);
+      }
+    });
+
+    res.status(201).json({ blogdetail: savedBlogDetail });
+  } catch (error) {
+    console.error("Error occurred in blogdetail route:", error);
+    res.status(500).json({ message: "An error occurred while adding the blog.", error: error.message });
+  }
+});
+
+// Cache middleware
 const cacheMiddleware = (req, res, next) => {
   const key = req.originalUrl || req.url;
   const cachedData = cache.get(key);
   if (cachedData) {
-    res.json(cachedData);
-    return;
+    return res.json(cachedData);
   }
   res.sendResponse = res.json;
   res.json = (body) => {
@@ -250,9 +245,8 @@ const cacheMiddleware = (req, res, next) => {
   };
   next();
 };
-
 //----   ALL_DATA REQUEST   ----//
-
+ 
 router.post("/get", Middleware_fun, async (req, res) => {
   try {
     let id = req.user;
@@ -261,14 +255,11 @@ router.post("/get", Middleware_fun, async (req, res) => {
     if (id != "none") {
       username = await User.find({ _id: id });
       finalname = username.name;
-      console.log(username.name);
     }
-    console.log(id);
     const sortedBlogs = await Blog_Schema.find({ user: id })
       .sort({ date: -1 })
       .exec();
 
-    console.log(sortedBlogs);
 
     res.json({ userblog: sortedBlogs, user: finalname });
   } catch (error) {
@@ -307,7 +298,6 @@ const deleteImageFromCloudinary = async (publicId) => {
   try {
     // Delete the image using the public ID
     const result = await cloudinary.uploader.destroy(publicId);
-    console.log(result);
   } catch (error) {
     console.error('Error deleting image:', error);
   }
@@ -613,8 +603,8 @@ router.post("/like", Middleware_fun, async (req, res) => {
 
 router.post('/comment', Middleware_fun, async (req, res) => {
   try {
-    console.log('Request user:', req.user);  // Check if user is set
 
+    
     const { blogId, text } = req.body;
     const userId = req.user; // Ensure userId is correctly retrieved from req.user
 

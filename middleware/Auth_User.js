@@ -1,15 +1,12 @@
 var jwt = require('jsonwebtoken');
 let private_key=process.env.PRIVATE_KEY;
-const Blog_Schema = require('../Schema/Blog_Detail.Schema');  
 const checkToken = (req, res, next) => {
     let token = req.header('auth-token');
   
-    console.log('Token received:', token);
   
     if (token) {
       try {
         let decoded = jwt.verify(token, private_key);
-        console.log('Decoded token:', decoded);
         req.user = decoded.id;   
         req.name = decoded.name;  
       } catch (error) {
@@ -21,7 +18,6 @@ const checkToken = (req, res, next) => {
       req.name = "none";  
     }
   
-    console.log('Request user:', req.user);
     next();
   };
   
