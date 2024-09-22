@@ -19,10 +19,8 @@ app.use(compression({ filter: shouldCompress }));
 
 function shouldCompress(req, res) {
   if (req.headers['x-no-compression']) {
-    // Don't compress responses with this request header
     return false;
   }
-  // Compress all other responses
   return compression.filter(req, res);
 }
 const fs = require("fs");
@@ -52,22 +50,9 @@ app.use((req, res, next) => {
 const cors = require("cors");
 app.use(express.json());
 app.use(cors());
-//----  STORAGE FUNCTION    ----//
 const express_validator = require("express-validator");
 
 const validationResult = express_validator.validationResult;
-
-// const storage = multer.diskStorage({
-//   destination: (req, file, cb) => {
-//     cb(null, "uploads/"); // Uploads will be stored in the 'uploads/' directory
-//   },
-//   filename: (req, file, cb) => {
-//     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-//     cb(null, uniqueSuffix + path.extname(file.originalname));
-//   },
-// });
-
-// const upload = multer({ storage: storage });
 
 //----  GETIMAGE FUNCTION    ----//
 
@@ -90,19 +75,14 @@ const getImage = async (customData, count) => {
     // Check if there are any matching images
     if (result.resources.length > 0) {
       const mostRecentImage = result.resources[0];
-      console.log("Most recent image:", mostRecentImage.url);
       return mostRecentImage.url; // Return the URL of the most recent image
     } else {
-      console.log("No images found.");
       return null;
     }
   } catch (error) {
-    console.error("Error fetching images:", error);
     throw error;
   }
 };
-
-
 
 //----  SIGNUP REQUEST    ----//
 
@@ -154,7 +134,6 @@ router.post("/signin", loginValidator, async (req, res) => {
       let user_password = users.password;
       let user_name=users.name;
       const result = user_password == password ? true : false;
-      console.log(result);
 
       if (result) {
         const UserId = users.id;
@@ -185,8 +164,6 @@ const upload = multer({ storage: storage });
 
 router.post("/blogdetail", Middleware_fun, upload.single("image"), async (req, res) => {
   try {
-    console.log("Request body:", req.body);
-    console.log("Uploaded file:", req.file);
 
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded." });
@@ -274,8 +251,6 @@ router.post("/get", Middleware_fun, async (req, res) => {
     res.status(500).send("An error occurred");
   }
 });
-
-
 
 // all the blog post
 router.post("/allpost", cacheMiddleware,Middleware_fun, async (req, res) => {
@@ -631,15 +606,6 @@ router.post('/comment', Middleware_fun, async (req, res) => {
     });
 
     await newComment.save();
-    console.log("Comment saved");
-
-    // Optional: Update the blog post to include the new comment
-    // const blogPost = await Blog_Schema.findById(blogId);
-    // if (blogPost) {
-    //   blogPost.comments.push(newComment._id);
-    //   await blogPost.save();
-    // }
-
     res.status(201).json({ comment: newComment });
   } catch (error) {
     console.error("Error occurred:", error);
