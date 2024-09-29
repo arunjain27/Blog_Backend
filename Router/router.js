@@ -12,19 +12,9 @@ const Comment=require("../Schema/Comment_Schema.js")
 const Middleware_fun = require("../middleware/Auth_User.js");    //----   MIDDLEWARE     ----//
 const multer = require("multer");
 const { Readable } = require('stream'); // Import Readable stream
-
 const compression = require("compression");
-app.use(compression());
-app.use(compression({ filter: shouldCompress }));
+ 
 
-function shouldCompress(req, res) {
-  if (req.headers['x-no-compression']) {
-    return false;
-  }
-  return compression.filter(req, res);
-}
-const fs = require("fs");
-// open AI
 const MODEL_NAME = process.env.MODEL_NAME;
 const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
 const axios = require("axios");
@@ -37,6 +27,26 @@ const {
   loginValidator,
   createValidator,
 } = require("../Validator/Express_Validator.js");
+
+
+app.use(compression({
+  level: 6, // Set a moderate compression level
+  filter: shouldCompress
+}));
+
+// function shouldCompress(req, res) {
+//   if (req.headers['x-no-compression']) {
+//     return false;
+//   }
+//   return compression.filter(req, res);
+// }
+
+function shouldCompress(req, res) {
+  if (req.headers['x-no-compression']) {
+    return false;
+  }
+  return /json|text|javascript|css|html/.test(res.getHeader('Content-Type'));
+}
 
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', "font-src 'self' https://fonts.gstatic.com");
@@ -54,35 +64,6 @@ const express_validator = require("express-validator");
 
 const validationResult = express_validator.validationResult;
 
-//----  GETIMAGE FUNCTION    ----//
-
-const getImage = async (customData, count) => {
-  try {
-    const result = await cloudinary.api.resources({
-      type: "upload",
-      context: true,
-      tags: Object.values(customData),
-      max_results: 1, // Retrieve only the most recent image
-      sort_by: "created_at", // Sort by creation date in descending order
-      direction: "desc", // Sort in descending order
-      transformation: [
-        { width: 250, crop: "scale" }, // Apply width and crop transformation
-        { quality: 20 }, // Set image quality to 35
-        { fetch_format: "low" } // Automatically select optimal format
-      ] 
-    }); 
-
-    // Check if there are any matching images
-    if (result.resources.length > 0) {
-      const mostRecentImage = result.resources[0];
-      return mostRecentImage.url; // Return the URL of the most recent image
-    } else {
-      return null;
-    }
-  } catch (error) {
-    throw error;
-  }
-};
 
 //----  SIGNUP REQUEST    ----//
 
@@ -160,7 +141,7 @@ router.post("/signin", loginValidator, async (req, res) => {
 
 //----   BLOG_DETAIL REQUEST   ----//
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({ storage: storage});
 
 router.post("/blogdetail", Middleware_fun, upload.single("image"), async (req, res) => {
   try {
@@ -181,7 +162,9 @@ router.post("/blogdetail", Middleware_fun, upload.single("image"), async (req, r
     stream.push(null); // Indicates the end of the stream
 
     // Upload to Cloudinary from memory
-    const uploadStream = cloudinary.uploader.upload_stream(async (error, result) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { secure: true, transformation: [{ width: 800, crop: "limit" }] }, // Image optimization
+      async (error, result) => {
       if (error) {
         console.error("Cloudinary upload error:", error);
         return res.status(500).json({ message: "Image upload failed", error: error.message });

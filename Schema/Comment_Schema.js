@@ -30,6 +30,7 @@ const Comment_Schema = new Schema({
   }]
 });
 
+Comment_Schema.index({ blog: 1, date: -1 });
 
 const Comment = mongoose.model('Comment', Comment_Schema);
 module.exports = Comment;

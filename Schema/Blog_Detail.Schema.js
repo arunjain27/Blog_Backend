@@ -49,8 +49,8 @@ const Blog_Detail = new Schema({
 });
 
 // Adding indexes for performance
-Blog_Detail.index({ user: 1 });
-Blog_Detail.index({ date: -1 });
+Blog_Detail.index({ user: 1, date: -1 });
+
 
 const Blog_Schema = mongoose.model('Blog_Detail', Blog_Detail);
 module.exports = Blog_Schema;
