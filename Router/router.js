@@ -27,6 +27,14 @@ const {
   createValidator,
 } = require("../Validator/Express_Validator.js");
 
+const corsOptions = {
+  origin: 'https://musingsss.netlify.app', // Allow only this origin
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allow specific HTTP methods
+  credentials: true, // Allow credentials (cookies, authorization headers, etc.)
+};
+
+app.use(cors(corsOptions)); // Use CORS with the defined options
+
 app.use(
   compression({
     level: 6,
@@ -56,9 +64,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const cors = require("cors");
-app.use(express.json());
-app.use(cors());
+
 const express_validator = require("express-validator");
 const validationResult = express_validator.validationResult;
 
