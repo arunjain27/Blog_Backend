@@ -2,9 +2,7 @@ var jwt = require('jsonwebtoken');
 let private_key=process.env.PRIVATE_KEY;
 const checkToken = (req, res, next) => {
     let token = req.header('auth-token');
-  
-  
-    if (token) {
+    if (token){
       try {
         let decoded = jwt.verify(token, private_key);
         req.user = decoded.id;   
@@ -13,11 +11,11 @@ const checkToken = (req, res, next) => {
         console.error('Token verification failed:', error);
         return res.status(401).json({ message: 'Invalid or expired token' });
       }
-    } else {
+    } 
+    else{
       req.user = "none"; 
       req.name = "none";  
     }
-  
     next();
   };
   

@@ -1,19 +1,18 @@
 const Database_Connection = require("../Database_Connection/Db.js");
-Database_Connection();                                                //---- DATABASE_CONNECTION  ----//
+Database_Connection(); //---- DATABASE_CONNECTION  ----//
 const express = require("express");
 const app = express();
 const NodeCache = require("node-cache");
 const cache = new NodeCache();
 const router = express.Router();
-const cloudinary = require("../Cloudinary/Cloudinary_Details.js");   //----  CLOUDINARY      ----//
-const User = require("../Schema/User.Schema.js");                   //----   USER_SCHEMA    ----//
-const Blog_Schema = require("../Schema/Blog_Detail.Schema.js");    //----   BLOG_SCHEMA    ----//
-const Comment=require("../Schema/Comment_Schema.js")
-const Middleware_fun = require("../middleware/Auth_User.js");    //----   MIDDLEWARE     ----//
+const cloudinary = require("../Cloudinary/Cloudinary_Details.js"); //----  CLOUDINARY      ----//
+const User = require("../Schema/User.Schema.js"); //----   USER_SCHEMA    ----//
+const Blog_Schema = require("../Schema/Blog_Detail.Schema.js"); //----   BLOG_SCHEMA    ----//
+const Comment = require("../Schema/Comment_Schema.js");
+const Middleware_fun = require("../middleware/Auth_User.js"); //----   MIDDLEWARE     ----//
 const multer = require("multer");
-const { Readable } = require('stream'); // Import Readable stream
+const { Readable } = require("stream"); // Import Readable stream
 const compression = require("compression");
- 
 
 const MODEL_NAME = process.env.MODEL_NAME;
 const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
@@ -22,38 +21,38 @@ const path = require("path");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
-const numSaltRounds = 8; 
+const numSaltRounds = 8;
 const {
   loginValidator,
   createValidator,
 } = require("../Validator/Express_Validator.js");
 
-
-app.use(compression({
-  level: 6, // Set a moderate compression level
-  filter: shouldCompress
-}));
-
-// function shouldCompress(req, res) {
-//   if (req.headers['x-no-compression']) {
-//     return false;
-//   }
-//   return compression.filter(req, res);
-// }
+app.use(
+  compression({
+    level: 6,
+    filter: shouldCompress,
+  })
+);
 
 function shouldCompress(req, res) {
-  if (req.headers['x-no-compression']) {
+  if (req.headers["x-no-compression"]) {
     return false;
   }
-  return /json|text|javascript|css|html/.test(res.getHeader('Content-Type'));
+  return /json|text|javascript|css|html/.test(res.getHeader("Content-Type"));
 }
 
 app.use((req, res, next) => {
-  res.setHeader('Content-Security-Policy', "font-src 'self' https://fonts.gstatic.com");
+  res.setHeader(
+    "Content-Security-Policy",
+    "font-src 'self' https://fonts.gstatic.com"
+  );
   next();
 });
 app.use((req, res, next) => {
-  res.setHeader('Content-Security-Policy', "style-src 'self' https://fonts.googleapis.com");
+  res.setHeader(
+    "Content-Security-Policy",
+    "style-src 'self' https://fonts.googleapis.com"
+  );
   next();
 });
 
@@ -61,9 +60,7 @@ const cors = require("cors");
 app.use(express.json());
 app.use(cors());
 const express_validator = require("express-validator");
-
 const validationResult = express_validator.validationResult;
-
 
 //----  SIGNUP REQUEST    ----//
 
@@ -71,26 +68,21 @@ router.post("/signup", createValidator, async (req, res) => {
   try {
     const { name, email, password } = req.body;
     const Encrypted_Password = await bcryptjs.hash(password, numSaltRounds);
-
     const userDetails = new User({
       name,
       email,
       password,
       hashpassword: Encrypted_Password,
     });
-
     let savedUser = await userDetails.save();
-
     const UserId = userDetails.id;
     const Username = userDetails.name;
     let data = {
       id: UserId,
       name: Username,
     };
-
-    let token = jwt.sign(data,PRIVATE_KEY);
-
-    res.json({ data:token ,username:Username,userid:UserId });
+    let token = jwt.sign(data, PRIVATE_KEY);
+    res.json({ data: token, username: Username, userid: UserId });
   } catch (error) {
     console.log("Error occurred:", error);
     res.status(500).send("An error occurred");
@@ -104,18 +96,15 @@ router.post("/signin", loginValidator, async (req, res) => {
     const errors = validationResult(req);
     console.log(errors);
     if (!errors.isEmpty()) {
-      // in case request params meet the validation criteria
       return res.send(errors);
     }
     const { email, password } = req.body;
     let users = await User.findOne({ email: email });
-    console.log(users);
 
     if (users) {
       let user_password = users.password;
-      let user_name=users.name;
+      let user_name = users.name;
       const result = user_password == password ? true : false;
-
       if (result) {
         const UserId = users.id;
         const Username = users.name;
@@ -123,10 +112,8 @@ router.post("/signin", loginValidator, async (req, res) => {
           id: UserId,
           name: Username,
         };
-
         let token = jwt.sign(data, PRIVATE_KEY);
-
-        res.json({ data:token  ,username:user_name,userid:UserId });
+        res.json({ data: token, username: user_name, userid: UserId });
       } else {
         res.send("incorrect password");
       }
@@ -141,62 +128,68 @@ router.post("/signin", loginValidator, async (req, res) => {
 
 //----   BLOG_DETAIL REQUEST   ----//
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage});
+const upload = multer({ storage: storage });
 
-router.post("/blogdetail", Middleware_fun, upload.single("image"), async (req, res) => {
-  try {
-
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded." });
-    }
-
-    const { title, tag, description } = req.body;
-
-    if (!title || !description || !tag) {
-      return res.status(400).json({ message: "All fields are required." });
-    }
-
-    // Create a readable stream from the buffer
-    const stream = new Readable();
-    stream.push(req.file.buffer);
-    stream.push(null); // Indicates the end of the stream
-
-    // Upload to Cloudinary from memory
-    const uploadStream = cloudinary.uploader.upload_stream(
-      { secure: true, transformation: [{ width: 800, crop: "limit" }] }, // Image optimization
-      async (error, result) => {
-      if (error) {
-        console.error("Cloudinary upload error:", error);
-        return res.status(500).json({ message: "Image upload failed", error: error.message });
+router.post(
+  "/blogdetail",
+  Middleware_fun,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded." });
       }
-
-      const blogDetail = new Blog_Schema({
-        user: req.user,
-        name: req.name,
-        title,
-        tag,
-        description,
-        image: result.secure_url, // Use the URL returned by Cloudinary
-      });
-
-      try {
-        const savedBlogDetail = await blogDetail.save();
-        res.status(201).json({ blogdetail: savedBlogDetail });
-      } catch (err) {
-        console.error("Error saving blog detail:", err);
-        res.status(500).json({ message: "Failed to save blog detail", error: err.message });
+      const { title, tag, description } = req.body;
+      if (!title || !description || !tag) {
+        return res.status(400).json({ message: "All fields are required." });
       }
-    });
+      const stream = new Readable();
+      stream.push(req.file.buffer);
+      stream.push(null);
 
-    // Pipe the file buffer to Cloudinary
-    stream.pipe(uploadStream);
+      const uploadStream = cloudinary.uploader.upload_stream(
+        { secure: true, transformation: [{ width: 800, crop: "limit" }] }, // Image optimization
+        async (error, result) => {
+          if (error) {
+            console.error("Cloudinary upload error:", error);
+            return res
+              .status(500)
+              .json({ message: "Image upload failed", error: error.message });
+          }
+          const blogDetail = new Blog_Schema({
+            user: req.user,
+            name: req.name,
+            title,
+            tag,
+            description,
+            image: result.secure_url, // Use the URL returned by Cloudinary
+          });
 
-  } catch (error) {
-    console.error("Error in blogdetail route:", error);
-    res.status(500).json({ message: "Internal Server Error", error: error.message });
+          try {
+            const savedBlogDetail = await blogDetail.save();
+            res.status(201).json({ blogdetail: savedBlogDetail });
+          } catch (err) {
+            console.error("Error saving blog detail:", err);
+            res
+              .status(500)
+              .json({
+                message: "Failed to save blog detail",
+                error: err.message,
+              });
+          }
+        }
+      );
+
+      // Pipe the file buffer to Cloudinary
+      stream.pipe(uploadStream);
+    } catch (error) {
+      console.error("Error in blogdetail route:", error);
+      res
+        .status(500)
+        .json({ message: "Internal Server Error", error: error.message });
+    }
   }
-});
-
+);
 
 // Cache middleware
 const cacheMiddleware = (req, res, next) => {
@@ -213,11 +206,10 @@ const cacheMiddleware = (req, res, next) => {
   next();
 };
 //----   ALL_DATA REQUEST   ----//
- 
+
 router.post("/get", Middleware_fun, async (req, res) => {
   try {
     let id = req.user;
-
     let finalname = "none";
     if (id != "none") {
       username = await User.find({ _id: id });
@@ -226,8 +218,6 @@ router.post("/get", Middleware_fun, async (req, res) => {
     const sortedBlogs = await Blog_Schema.find({ user: id })
       .sort({ date: -1 })
       .exec();
-
-
     res.json({ userblog: sortedBlogs, user: finalname });
   } catch (error) {
     console.error("Error occurred:", error);
@@ -236,7 +226,7 @@ router.post("/get", Middleware_fun, async (req, res) => {
 });
 
 // all the blog post
-router.post("/allpost", cacheMiddleware,Middleware_fun, async (req, res) => {
+router.post("/allpost", cacheMiddleware, Middleware_fun, async (req, res) => {
   try {
     let userid = req.user;
     let finalname = "none";
@@ -247,9 +237,7 @@ router.post("/allpost", cacheMiddleware,Middleware_fun, async (req, res) => {
         finalname = user.name;
       }
     }
-
     const sortedBlogs = await Blog_Schema.find().sort({ date: -1 }).exec();
-
     res.json({ userblog: sortedBlogs, username: finalname });
   } catch (error) {
     console.error("Error occurred:", error);
@@ -258,57 +246,54 @@ router.post("/allpost", cacheMiddleware,Middleware_fun, async (req, res) => {
 });
 
 // -----  DELETE  REQUEST    -----//
-
 const deleteImageFromCloudinary = async (publicId) => {
   try {
-    // Delete the image using the public ID
     const result = await cloudinary.uploader.destroy(publicId);
   } catch (error) {
-    console.error('Error deleting image:', error);
+    console.error("Error deleting image:", error);
   }
 };
 
-
 router.delete("/:id", async (req, res) => {
   try {
-    // Find the blog post in the database
     const id = req.params.id;
     const blogPost = await Blog_Schema.findOne({ _id: id });
-  
+
     // Extract the public ID from the URL (assuming the URL is stored in a field called imageUrl)
     const url = blogPost.image;
-    const publicId = url.substring(url.lastIndexOf('/') + 1, url.lastIndexOf('.'));
-    
+    const publicId = url.substring(
+      url.lastIndexOf("/") + 1,
+      url.lastIndexOf(".")
+    );
+
     // Delete the image from Cloudinary
-    await deleteImageFromCloudinary(publicId); 
+    await deleteImageFromCloudinary(publicId);
     const deletepost = await Blog_Schema.deleteOne({ _id: id });
-   
-    res.json({success:true})
+
+    res.json({ success: true });
   } catch (error) {
-    console.error('Error fetching blog post or deleting image:', error);
-    res.json({success:false})
-  }});
+    console.error("Error fetching blog post or deleting image:", error);
+    res.json({ success: false });
+  }
+});
 
 // -----  UPDATE  REQUEST    -----//
 
-router.get('/blog/:id', async (req, res) => {
+router.get("/blog/:id", async (req, res) => {
   try {
     const blogId = req.params.id;
-
     // Fetch blog by ID and populate the user field
     const blog = await Blog_Schema.findById(blogId)
-      .populate('user', 'name')  // Only include 'name' from user
+      .populate("user", "name") // Only include 'name' from user
       .exec();
 
     if (!blog) {
-      return res.status(404).json({ message: 'Blog not found' });
+      return res.status(404).json({ message: "Blog not found" });
     }
-
     // Fetch comments related to the blog and populate user field
     const comments = await Comment.find({ blog: blogId })
-      .populate('user', 'name')  // Only include 'name' from user
+      .populate("user", "name") // Only include 'name' from user
       .exec();
-
     // Construct the response
     const response = {
       blog: {
@@ -319,37 +304,36 @@ router.get('/blog/:id', async (req, res) => {
         description: blog.description,
         image: blog.image,
         date: blog.date,
-        likes: blog.likes.length,  // Count the number of likes
-        dislikes: blog.dislikes.length,  // Count the number of dislikes
-        comments: comments.map(comment => ({
+        likes: blog.likes.length,
+        dislikes: blog.dislikes.length,
+        comments: comments.map((comment) => ({
           _id: comment._id,
           text: comment.text,
           date: comment.date,
-          likes: comment.likes.length,  // Count the number of likes
-          dislikes: comment.dislikes.length,  // Count the number of dislikes
-          user: comment.user // Include the name of the user who commented
-        }))
-      }
+          likes: comment.likes.length,
+          dislikes: comment.dislikes.length,
+          user: comment.user,
+        })),
+      },
     };
 
     res.json(response);
   } catch (error) {
-    console.error('Error fetching blog by ID:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error("Error fetching blog by ID:", error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
 // Update a comment
-router.put('/:id', Middleware_fun, async (req, res) => {
+router.put("/:id", Middleware_fun, async (req, res) => {
   try {
     const { text } = req.body;
     const comment = await Comment.findById(req.params.id);
-    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
     // Check if the user is the author of the comment
     if (comment.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
+      return res.status(403).json({ message: "Not authorized" });
     }
-
     comment.text = text;
     const updatedComment = await comment.save();
     res.json({ comment: updatedComment });
@@ -391,19 +375,15 @@ router.post("/newpost", async (req, res) => {
     const prompt =
       "Improve the title blog post: , improve the english , looks more attractive ,creative and professional";
 
-    // Integrate with OpenAI to improve title, tag, and description
     const improvedTitle = await improveText(prompt, title);
     const improvedTag = await improveText(prompt, tag);
     const improvedDescription = await improveText(prompt, description);
 
-    // You can proceed with saving the post to the database with the improved text
-    res
-      .status(201)
-      .json({
-        title: improvedTitle,
-        tag: improvedTag,
-        description: improvedDescription,
-      });
+    res.status(201).json({
+      title: improvedTitle,
+      tag: improvedTag,
+      description: improvedDescription,
+    });
   } catch (error) {
     console.error("Error occurred:", error);
     res.status(500).send("An error occurred");
@@ -416,80 +396,59 @@ const {
   HarmBlockThreshold,
 } = require("@google/generative-ai");
 
-// Initialize Google Generative AI client
 const genAI = new GoogleGenerativeAI(API_KEY_GEMINI); // Replace API_KEY with your actual API key
 
-// Example post request handler
-
-
-// -----  EDIT COMMENT REQUEST  ----- //
-// ----- UPDATE COMMENT REQUEST ----- //
-router.put('/comment/:id', Middleware_fun, async (req, res) => {
+router.put("/comment/:id", Middleware_fun, async (req, res) => {
   try {
     const commentId = req.params.id;
     const userId = req.user;
     const { text } = req.body;
-
-    // Find the comment
     const comment = await Comment.findById(commentId);
-
     if (!comment) {
-      return res.status(404).json({ message: 'Comment not found' });
+      return res.status(404).json({ message: "Comment not found" });
     }
-
-    // Check if the user is the author of the comment
     if (comment.user.toString() !== userId.toString()) {
-      return res.status(403).json({ message: 'Not authorized to edit this comment' });
+      return res
+        .status(403)
+        .json({ message: "Not authorized to edit this comment" });
     }
-
-    // Update the comment text
     comment.text = text;
     await comment.save();
-
-    res.status(200).json({ message: 'Comment updated successfully', comment });
+    res.status(200).json({ message: "Comment updated successfully", comment });
   } catch (error) {
-    console.error('Error updating comment:', error);
-    res.status(500).json({ message: 'An error occurred' });
+    console.error("Error updating comment:", error);
+    res.status(500).json({ message: "An error occurred" });
   }
 });
 
-
-// -----  DELETE COMMENT REQUEST  ----- //
-// ----- DELETE COMMENT REQUEST ----- //
 // Delete a comment
-router.delete('/comment/:id', Middleware_fun, async (req, res) => {
+router.delete("/comment/:id", Middleware_fun, async (req, res) => {
   try {
     // Find and populate comment
-    const comment = await Comment.findById(req.params.id).populate('user');
-    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    const comment = await Comment.findById(req.params.id).populate("user");
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
     // Ensure req.user is set and comment.user is populated
     if (!req.user || !comment.user) {
-      return res.status(400).json({ message: 'User or comment not found' });
+      return res.status(400).json({ message: "User or comment not found" });
     }
- 
-    // Check if the user is the author of the comment
     if (comment.user._id.toString() !== req.user.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
+      return res.status(403).json({ message: "Not authorized" });
     }
-
-    // Use findByIdAndDelete to remove the comment
     await Comment.findByIdAndDelete(req.params.id);
 
-    res.json({ message: 'Comment removed' });
+    res.json({ message: "Comment removed" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-
-router.get('/:id', async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
-    const blog = await Blog.findById(req.params.id)
-      .populate({
-        path: 'comments',
-        populate: { path: 'user', select: 'name' }  // Populate user details
-      });
+    const blog = await Blog.findById(req.params.id).populate({
+      path: "comments",
+      populate: { path: "user", select: "name" }, // Populate user details
+    });
 
     res.json({ blog });
   } catch (error) {
@@ -501,10 +460,8 @@ router.post("/generateText", async (req, res) => {
     const { title, tag, description } = req.body;
     const str = await generateCreativeText(title, tag, description);
 
-    // Split the string by '\n\n'
     let sections = str.split("\n\n");
 
-    // Extract title, tag, and description
     let generatedTitle = sections[0].replace("**Title:** ", "");
     let generatedTag = sections[1].replace("**Tag:** ", "");
     let generatedDescription = sections[2].replace("**Description:** ", "");
@@ -523,37 +480,35 @@ router.post("/like", Middleware_fun, async (req, res) => {
     const userId = req.user;
 
     if (!userId || userId === "none") {
-      return res.status(401).json({ message: 'Unauthorized user' });
+      return res.status(401).json({ message: "Unauthorized user" });
     }
-
     const blogPost = await Blog_Schema.findById(blogId);
-
     if (!blogPost) {
-      return res.status(404).json({ message: 'Blog post not found' });
+      return res.status(404).json({ message: "Blog post not found" });
     }
-
     const alreadyLiked = blogPost.likes.includes(userId);
     const alreadyDisliked = blogPost.dislikes.includes(userId);
-
     if (alreadyLiked) {
-      // Remove like and decrement likes count
-      blogPost.likes = blogPost.likes.filter(id => id.toString() !== userId.toString());
+      blogPost.likes = blogPost.likes.filter(
+        (id) => id.toString() !== userId.toString()
+      );
       if (alreadyDisliked) {
-        // If disliked, remove dislike
-        blogPost.dislikes = blogPost.dislikes.filter(id => id.toString() !== userId.toString());
+        blogPost.dislikes = blogPost.dislikes.filter(
+          (id) => id.toString() !== userId.toString()
+        );
       }
     } else {
-      // Add like and increment likes count
       blogPost.likes.push(userId);
       if (alreadyDisliked) {
-        // If disliked, remove dislike
-        blogPost.dislikes = blogPost.dislikes.filter(id => id.toString() !== userId.toString());
+        blogPost.dislikes = blogPost.dislikes.filter(
+          (id) => id.toString() !== userId.toString()
+        );
       }
     }
 
     await blogPost.save();
     res.status(200).json({
-      message: 'Blog updated',
+      message: "Blog updated",
       blog: {
         _id: blogPost._id,
         likes: blogPost.likes.length,
@@ -566,67 +521,68 @@ router.post("/like", Middleware_fun, async (req, res) => {
   }
 });
 
-router.post('/comment', Middleware_fun, async (req, res) => {
+router.post("/comment", Middleware_fun, async (req, res) => {
   try {
-
-    
     const { blogId, text } = req.body;
-    const userId = req.user; // Ensure userId is correctly retrieved from req.user
-
+    const userId = req.user;
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized user' });
+      return res.status(401).json({ message: "Unauthorized user" });
     }
 
     if (!blogId || !text) {
-      return res.status(400).json({ message: 'Missing required fields' });
+      return res.status(400).json({ message: "Missing required fields" });
     }
-
-    // Create and save the new comment
     const newComment = new Comment({
       blog: blogId,
       user: userId,
-      text
+      text,
     });
 
     await newComment.save();
     res.status(201).json({ comment: newComment });
   } catch (error) {
     console.error("Error occurred:", error);
-    res.status(500).json({ message: 'An error occurred', error: error.message });
+    res
+      .status(500)
+      .json({ message: "An error occurred", error: error.message });
   }
 });
-
 
 router.post("/like-dislike-comment", Middleware_fun, async (req, res) => {
   try {
     const { commentId, type } = req.body;
     const userId = req.user;
-
     const comment = await Comment.findById(commentId);
-
     if (!comment) {
-      return res.status(404).json({ message: 'Comment not found' });
+      return res.status(404).json({ message: "Comment not found" });
     }
-
     const alreadyLiked = comment.likes.includes(userId);
     const alreadyDisliked = comment.dislikes.includes(userId);
 
-    if (type === 'like') {
+    if (type === "like") {
       if (alreadyLiked) {
-        comment.likes = comment.likes.filter(id => id.toString() !== userId.toString());
+        comment.likes = comment.likes.filter(
+          (id) => id.toString() !== userId.toString()
+        );
       } else {
         comment.likes.push(userId);
         if (alreadyDisliked) {
-          comment.dislikes = comment.dislikes.filter(id => id.toString() !== userId.toString());
+          comment.dislikes = comment.dislikes.filter(
+            (id) => id.toString() !== userId.toString()
+          );
         }
       }
-    } else if (type === 'dislike') {
+    } else if (type === "dislike") {
       if (alreadyDisliked) {
-        comment.dislikes = comment.dislikes.filter(id => id.toString() !== userId.toString());
+        comment.dislikes = comment.dislikes.filter(
+          (id) => id.toString() !== userId.toString()
+        );
       } else {
         comment.dislikes.push(userId);
         if (alreadyLiked) {
-          comment.likes = comment.likes.filter(id => id.toString() !== userId.toString());
+          comment.likes = comment.likes.filter(
+            (id) => id.toString() !== userId.toString()
+          );
         }
       }
     }
@@ -651,7 +607,9 @@ router.get("/notifications", Middleware_fun, async (req, res) => {
   try {
     const userId = req.user;
 
-    const notifications = await Notification.find({ user: userId }).sort({ date: -1 });
+    const notifications = await Notification.find({ user: userId }).sort({
+      date: -1,
+    });
 
     res.status(200).json({ notifications });
   } catch (error) {
@@ -660,41 +618,36 @@ router.get("/notifications", Middleware_fun, async (req, res) => {
   }
 });
 
-router.put('/update/:id', Middleware_fun, async (req, res) => {
+router.put("/update/:id", Middleware_fun, async (req, res) => {
   const blogId = req.params.id;
-  const { title, tag, description} = req.body;
+  const { title, tag, description } = req.body;
 
   try {
     // Find the blog post by ID
     const blog = await Blog_Schema.findById(blogId);
-
     if (!blog) {
-      return res.status(404).json({ message: 'Blog not found' });
+      return res.status(404).json({ message: "Blog not found" });
     }
-
     // Check if the logged-in user is the author of the blog
     if (blog.user.toString() !== req.user.toString()) {
-      return res.status(403).json({ message: 'Not authorized to update this blog' });
+      return res
+        .status(403)
+        .json({ message: "Not authorized to update this blog" });
     }
-
     // Update the blog fields
     blog.title = title || blog.title;
     blog.tag = tag || blog.tag;
     blog.description = description || blog.description;
-    // Set the updated date to current time
-
-    // Save the updated blog
     const updatedBlog = await blog.save();
-
     res.json({
-      message: 'Blog updated successfully',
-      blog: updatedBlog
+      message: "Blog updated successfully",
+      blog: updatedBlog,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
-// Function to generate creative text
+
 async function generateCreativeText(title, tag, description) {
   try {
     const model = genAI.getGenerativeModel({ model: MODEL_NAME });
@@ -746,9 +699,7 @@ async function generateCreativeText(title, tag, description) {
       generationConfig,
       safetySettings,
     });
-
     const response = result.response;
-
     return response.text();
   } catch (error) {
     console.error("Error generating creative text:", error);
