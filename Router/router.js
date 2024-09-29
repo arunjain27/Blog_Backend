@@ -31,10 +31,11 @@ const {
 const corsOptions = {
   origin: 'https://musingsss.netlify.app', // Allow only this origin
   methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allow specific HTTP methods
-  credentials: true, // Allow credentials (cookies, authorization headers, etc.)
-};
+ };
 
 app.use(cors(corsOptions));
+
+app.options('*', cors(corsOptions)); // Enable pre-flight requests for all routes
 
 // Enable compression middleware
 app.use(
