@@ -13,10 +13,10 @@ const Middleware_fun = require("../middleware/Auth_User.js"); //----   MIDDLEWAR
 const multer = require("multer");
 const { Readable } = require("stream"); // Import Readable stream
 const compression = require("compression");
-const cors = require("cors");
+
 const MODEL_NAME = process.env.MODEL_NAME;
 const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
-const axios = require("axios"); 
+const axios = require("axios");
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
@@ -27,17 +27,6 @@ const {
   createValidator,
 } = require("../Validator/Express_Validator.js");
 
-// CORS options
-// const corsOptions = {
-//   origin: 'https://musingsss.netlify.app', // Allow only this origin
-//   methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allow specific HTTP methods
-//  };
-
-app.use(cors());
-
-app.options('*', cors()); // Enable pre-flight requests for all routes
- 
-// Enable compression middleware
 app.use(
   compression({
     level: 6,
@@ -45,7 +34,6 @@ app.use(
   })
 );
 
-// Function to determine if response should be compressed
 function shouldCompress(req, res) {
   if (req.headers["x-no-compression"]) {
     return false;
@@ -53,24 +41,29 @@ function shouldCompress(req, res) {
   return /json|text|javascript|css|html/.test(res.getHeader("Content-Type"));
 }
 
-// Set Content Security Policy headers
 app.use((req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
-    "font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com"
+    "font-src 'self' https://fonts.gstatic.com"
+  );
+  next();
+});
+app.use((req, res, next) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    "style-src 'self' https://fonts.googleapis.com"
   );
   next();
 });
 
+const cors = require("cors");
 app.use(express.json());
-
-
-
+app.use(cors());
 const express_validator = require("express-validator");
 const validationResult = express_validator.validationResult;
 
 //----  SIGNUP REQUEST    ----//
-
+ 
 router.post("/signup", createValidator, async (req, res) => {
   try {
     const { name, email, password } = req.body;
