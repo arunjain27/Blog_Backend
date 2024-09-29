@@ -28,15 +28,15 @@ const {
 } = require("../Validator/Express_Validator.js");
 
 // CORS options
-const corsOptions = {
-  origin: 'https://musingsss.netlify.app', // Allow only this origin
-  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allow specific HTTP methods
- };
+// const corsOptions = {
+//   origin: 'https://musingsss.netlify.app', // Allow only this origin
+//   methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allow specific HTTP methods
+//  };
 
-app.use(cors(corsOptions));
+app.use(cors());
 
-app.options('*', cors(corsOptions)); // Enable pre-flight requests for all routes
-
+app.options('*', cors()); // Enable pre-flight requests for all routes
+ 
 // Enable compression middleware
 app.use(
   compression({
