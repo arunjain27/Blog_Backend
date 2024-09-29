@@ -13,10 +13,10 @@ const Middleware_fun = require("../middleware/Auth_User.js"); //----   MIDDLEWAR
 const multer = require("multer");
 const { Readable } = require("stream"); // Import Readable stream
 const compression = require("compression");
-
+const cors=require("cors");
 const MODEL_NAME = process.env.MODEL_NAME;
 const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
-const axios = require("axios");
+const axios = require("axios"); 
 const path = require("path");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
