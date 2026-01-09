@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "type": "module",
-    "start": "nodemon index.js"
+    "start": "node index.js"
   },
   "author": "Arun Jain",
   "license": "ISC",
@@ -24,7 +24,6 @@
     "mongoose": "^8.0.4",
     "multer": "^1.4.5-lts.1",
     "node-cache": "^5.1.2",
-    "nodemon": "^3.0.2",
     "stream": "^0.0.3"
   }
 }
