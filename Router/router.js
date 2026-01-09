@@ -1,69 +1,36 @@
 const Database_Connection = require("../Database_Connection/Db.js");
 Database_Connection(); //---- DATABASE_CONNECTION  ----//
+
+const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
+
 const express = require("express");
-const app = express();
+const router = express.Router();
 const NodeCache = require("node-cache");
 const cache = new NodeCache();
-const router = express.Router();
-const cloudinary = require("../Cloudinary/Cloudinary_Details.js"); //----  CLOUDINARY      ----//
-const User = require("../Schema/User.Schema.js"); //----   USER_SCHEMA    ----//
-const Blog_Schema = require("../Schema/Blog_Detail.Schema.js"); //----   BLOG_SCHEMA    ----//
+const cloudinary = require("../Cloudinary/Cloudinary_Details.js");
+const User = require("../Schema/User.Schema.js");
+const Blog_Schema = require("../Schema/Blog_Detail.Schema.js");
 const Comment = require("../Schema/Comment_Schema.js");
-const Middleware_fun = require("../middleware/Auth_User.js"); //----   MIDDLEWARE     ----//
+const Middleware_fun = require("../middleware/Auth_User.js");
 const multer = require("multer");
-const { Readable } = require("stream"); // Import Readable stream
-const compression = require("compression");
+const { Readable } = require("stream");
 
 const MODEL_NAME = process.env.MODEL_NAME;
-const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
 const axios = require("axios");
-const path = require("path");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const numSaltRounds = 8;
+
 const {
   loginValidator,
   createValidator,
 } = require("../Validator/Express_Validator.js");
 
-app.use(
-  compression({
-    level: 6,
-    filter: shouldCompress,
-  })
-);
-
-function shouldCompress(req, res) {
-  if (req.headers["x-no-compression"]) {
-    return false;
-  }
-  return /json|text|javascript|css|html/.test(res.getHeader("Content-Type"));
-}
-
-app.use((req, res, next) => {
-  res.setHeader(
-    "Content-Security-Policy",
-    "font-src 'self' https://fonts.gstatic.com"
-  );
-  next();
-});
-app.use((req, res, next) => {
-  res.setHeader(
-    "Content-Security-Policy",
-    "style-src 'self' https://fonts.googleapis.com"
-  );
-  next();
-});
-
-const cors = require("cors");
-app.use(express.json());
-app.use(cors());
 const express_validator = require("express-validator");
 const validationResult = express_validator.validationResult;
 
 //----  SIGNUP REQUEST    ----//
- 
 router.post("/signup", createValidator, async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -90,18 +57,18 @@ router.post("/signup", createValidator, async (req, res) => {
 });
 
 //----  SIGNIN REQUEST    ----//
-
 router.post("/signin", loginValidator, async (req, res) => {
   try {
     const errors = validationResult(req);
     console.log(errors);
     if (!errors.isEmpty()) {
-      return res.send(errors);
+      return res.status(400).json({ errors: errors.array() });
     }
     const { email, password } = req.body;
     let users = await User.findOne({ email: email });
 
     if (users) {
+      console.log('users - ', users);
       let user_password = users.password;
       let user_name = users.name;
       const result = user_password == password ? true : false;
@@ -115,10 +82,10 @@ router.post("/signin", loginValidator, async (req, res) => {
         let token = jwt.sign(data, PRIVATE_KEY);
         res.json({ data: token, username: user_name, userid: UserId });
       } else {
-        res.send("incorrect password");
+        res.status(401).json({ message: "incorrect password" });
       }
     } else {
-      res.send("not a valid user. Sign in properly.");
+      res.status(404).json({ message: "not a valid user. Sign in properly." });
     }
   } catch (error) {
     console.error("Error occurred:", error);
@@ -148,7 +115,7 @@ router.post(
       stream.push(null);
 
       const uploadStream = cloudinary.uploader.upload_stream(
-        { secure: true, transformation: [{ width: 800, crop: "limit" }] }, // Image optimization
+        { secure: true, transformation: [{ width: 800, crop: "limit" }] },
         async (error, result) => {
           if (error) {
             console.error("Cloudinary upload error:", error);
@@ -162,7 +129,7 @@ router.post(
             title,
             tag,
             description,
-            image: result.secure_url, // Use the URL returned by Cloudinary
+            image: result.secure_url,
           });
 
           try {
@@ -180,7 +147,6 @@ router.post(
         }
       );
 
-      // Pipe the file buffer to Cloudinary
       stream.pipe(uploadStream);
     } catch (error) {
       console.error("Error in blogdetail route:", error);
@@ -200,13 +166,13 @@ const cacheMiddleware = (req, res, next) => {
   }
   res.sendResponse = res.json;
   res.json = (body) => {
-    cache.set(key, body, 60); // Cache for 60 seconds
+    cache.set(key, body, 60);
     res.sendResponse(body);
   };
   next();
 };
-//----   ALL_DATA REQUEST   ----//
 
+//----   ALL_DATA REQUEST   ----//
 router.post("/get", Middleware_fun, async (req, res) => {
   try {
     let id = req.user;
@@ -225,8 +191,8 @@ router.post("/get", Middleware_fun, async (req, res) => {
   }
 });
 
-// all the blog post
-router.post("/allpost", cacheMiddleware, Middleware_fun, async (req, res) => {
+// all the blog post with pagination support
+router.post("/allpost", Middleware_fun, async (req, res) => {
   try {
     let userid = req.user;
     let finalname = "none";
@@ -237,8 +203,33 @@ router.post("/allpost", cacheMiddleware, Middleware_fun, async (req, res) => {
         finalname = user.name;
       }
     }
-    const sortedBlogs = await Blog_Schema.find().sort({ date: -1 }).exec();
-    res.json({ userblog: sortedBlogs, username: finalname });
+    
+    // Pagination support
+    const page = parseInt(req.body.page) || 1;
+    const limit = parseInt(req.body.limit) || 12;
+    const skip = (page - 1) * limit;
+    
+    // Get total count for pagination
+    const totalBlogs = await Blog_Schema.countDocuments();
+    const totalPages = Math.ceil(totalBlogs / limit);
+    
+    // Fetch paginated blogs
+    const sortedBlogs = await Blog_Schema.find()
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+    
+    res.json({ 
+      userblog: sortedBlogs, 
+      username: finalname,
+      pagination: {
+        currentPage: page,
+        totalPages: totalPages,
+        totalBlogs: totalBlogs,
+        hasMore: page < totalPages
+      }
+    });
   } catch (error) {
     console.error("Error occurred:", error);
     res.status(500).send("An error occurred");
@@ -254,19 +245,76 @@ const deleteImageFromCloudinary = async (publicId) => {
   }
 };
 
+// Get popular posts (most liked)
+router.get("/popular", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 5;
+    const popularBlogs = await Blog_Schema.find()
+      .sort({ "likes.length": -1, date: -1 })
+      .limit(limit)
+      .select("_id title image tag date name likes")
+      .exec();
+    res.json({ blogs: popularBlogs });
+  } catch (error) {
+    console.error("Error fetching popular posts:", error);
+    res.status(500).json({ message: "Error fetching popular posts" });
+  }
+});
+
+// Get categories/tags
+router.get("/categories", async (req, res) => {
+  try {
+    const categories = await Blog_Schema.distinct("tag");
+    res.json({ categories: categories.filter(Boolean) });
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    res.status(500).json({ message: "Error fetching categories" });
+  }
+});
+
+// Get blogs by tag/category
+router.post("/category/:tag", Middleware_fun, async (req, res) => {
+  try {
+    const tag = req.params.tag;
+    const page = parseInt(req.body.page) || 1;
+    const limit = parseInt(req.body.limit) || 12;
+    const skip = (page - 1) * limit;
+    
+    const totalBlogs = await Blog_Schema.countDocuments({ tag: tag });
+    const totalPages = Math.ceil(totalBlogs / limit);
+    
+    const blogs = await Blog_Schema.find({ tag: tag })
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+    
+    res.json({
+      userblog: blogs,
+      pagination: {
+        currentPage: page,
+        totalPages: totalPages,
+        totalBlogs: totalBlogs,
+        hasMore: page < totalPages
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching posts by category:", error);
+    res.status(500).json({ message: "Error fetching posts by category" });
+  }
+});
+
 router.delete("/:id", async (req, res) => {
   try {
     const id = req.params.id;
     const blogPost = await Blog_Schema.findOne({ _id: id });
 
-    // Extract the public ID from the URL (assuming the URL is stored in a field called imageUrl)
     const url = blogPost.image;
     const publicId = url.substring(
       url.lastIndexOf("/") + 1,
       url.lastIndexOf(".")
     );
 
-    // Delete the image from Cloudinary
     await deleteImageFromCloudinary(publicId);
     const deletepost = await Blog_Schema.deleteOne({ _id: id });
 
@@ -278,23 +326,19 @@ router.delete("/:id", async (req, res) => {
 });
 
 // -----  UPDATE  REQUEST    -----//
-
 router.get("/blog/:id", async (req, res) => {
   try {
     const blogId = req.params.id;
-    // Fetch blog by ID and populate the user field
     const blog = await Blog_Schema.findById(blogId)
-      .populate("user", "name") // Only include 'name' from user
+      .populate("user", "name")
       .exec();
 
     if (!blog) {
       return res.status(404).json({ message: "Blog not found" });
     }
-    // Fetch comments related to the blog and populate user field
     const comments = await Comment.find({ blog: blogId })
-      .populate("user", "name") // Only include 'name' from user
+      .populate("user", "name")
       .exec();
-    // Construct the response
     const response = {
       blog: {
         _id: blog._id,
@@ -323,14 +367,13 @@ router.get("/blog/:id", async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
-// Update a comment
+
 router.put("/:id", Middleware_fun, async (req, res) => {
   try {
     const { text } = req.body;
     const comment = await Comment.findById(req.params.id);
     if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-    // Check if the user is the author of the comment
     if (comment.user.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
@@ -341,33 +384,6 @@ router.put("/:id", Middleware_fun, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-// genereate Ai text function
-
-async function improveText(prompt, text) {
-  try {
-    const response = await axios.post(
-      `https://api.openai.com/v1/text-tools/${MODEL_NAME}/improve`,
-      {
-        prompt: prompt,
-        text: text,
-        model: MODEL_NAME,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${API_KEY_GEMINI}`,
-        },
-      }
-    );
-
-    return response.data.data.improved_text;
-  } catch (error) {
-    console.error("Error improving text:", error);
-    throw error;
-  }
-}
-
-// Generate Ai Text
 
 router.post("/newpost", async (req, res) => {
   try {
@@ -396,7 +412,7 @@ const {
   HarmBlockThreshold,
 } = require("@google/generative-ai");
 
-const genAI = new GoogleGenerativeAI(API_KEY_GEMINI); // Replace API_KEY with your actual API key
+const genAI = new GoogleGenerativeAI(API_KEY_GEMINI);
 
 router.put("/comment/:id", Middleware_fun, async (req, res) => {
   try {
@@ -421,14 +437,11 @@ router.put("/comment/:id", Middleware_fun, async (req, res) => {
   }
 });
 
-// Delete a comment
 router.delete("/comment/:id", Middleware_fun, async (req, res) => {
   try {
-    // Find and populate comment
     const comment = await Comment.findById(req.params.id).populate("user");
     if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-    // Ensure req.user is set and comment.user is populated
     if (!req.user || !comment.user) {
       return res.status(400).json({ message: "User or comment not found" });
     }
@@ -447,7 +460,7 @@ router.get("/:id", async (req, res) => {
   try {
     const blog = await Blog.findById(req.params.id).populate({
       path: "comments",
-      populate: { path: "user", select: "name" }, // Populate user details
+      populate: { path: "user", select: "name" },
     });
 
     res.json({ blog });
@@ -455,23 +468,42 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
 router.post("/generateText", async (req, res) => {
   try {
+    console.log("=== API KEY CHECK ===");
+console.log("API_KEY_GEMINI from env:", process.env.API_KEY_GEMINI);
+console.log("API_KEY_GEMINI length:", process.env.API_KEY_GEMINI?.length);
+console.log("====================");
     const { title, tag, description } = req.body;
+    
+    // Validate input
+    if (!title || !tag || !description) {
+      return res.status(400).json({ 
+        error: "Missing required fields: title, tag, or description" 
+      });
+    }
+    
     const str = await generateCreativeText(title, tag, description);
 
     let sections = str.split("\n\n");
 
-    let generatedTitle = sections[0].replace("**Title:** ", "");
-    let generatedTag = sections[1].replace("**Tag:** ", "");
-    let generatedDescription = sections[2].replace("**Description:** ", "");
+    let generatedTitle = sections[0].replace("**Title:** ", "").replace("**Title:**", "").trim();
+    let generatedTag = sections[1].replace("**Tag:** ", "").replace("**Tag:**", "").trim();
+    let generatedDescription = sections[2].replace("**Description:** ", "").replace("**Description:**", "").trim();
 
-    res
-      .status(200)
-      .json({ generatedTitle, generatedTag, generatedDescription });
+    res.status(200).json({ 
+      generatedTitle, 
+      generatedTag, 
+      generatedDescription 
+    });
   } catch (error) {
-    console.error("Error occurred:", error);
-    res.status(500).json({ error: "An error occurred" });
+    console.error("Error in /generateText route:", error);
+    res.status(500).json({ 
+      error: "Failed to generate text",
+      message: error.message,
+      details: "Please check your API key and quota limits"
+    });
   }
 });
 router.post("/like", Middleware_fun, async (req, res) => {
@@ -539,7 +571,15 @@ router.post("/comment", Middleware_fun, async (req, res) => {
     });
 
     await newComment.save();
-    res.status(201).json({ comment: newComment });
+    
+    // Populate user field before sending response
+    const populatedComment = await Comment.findById(newComment._id)
+      .populate("user", "name")
+      .exec();
+    
+    res.status(201).json({ 
+      comment: populatedComment
+    });
   } catch (error) {
     console.error("Error occurred:", error);
     res
@@ -593,8 +633,8 @@ router.post("/like-dislike-comment", Middleware_fun, async (req, res) => {
         _id: comment._id,
         likes: comment.likes.length,
         dislikes: comment.dislikes.length,
-        text: comment.text, // Ensure text is included
-        date: comment.date, // Ensure date is included
+        text: comment.text,
+        date: comment.date,
       },
     });
   } catch (error) {
@@ -623,18 +663,15 @@ router.put("/update/:id", Middleware_fun, async (req, res) => {
   const { title, tag, description } = req.body;
 
   try {
-    // Find the blog post by ID
     const blog = await Blog_Schema.findById(blogId);
     if (!blog) {
       return res.status(404).json({ message: "Blog not found" });
     }
-    // Check if the logged-in user is the author of the blog
     if (blog.user.toString() !== req.user.toString()) {
       return res
         .status(403)
         .json({ message: "Not authorized to update this blog" });
     }
-    // Update the blog fields
     blog.title = title || blog.title;
     blog.tag = tag || blog.tag;
     blog.description = description || blog.description;
@@ -647,64 +684,46 @@ router.put("/update/:id", Middleware_fun, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
 async function generateCreativeText(title, tag, description) {
   try {
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
-    const generationConfig = {
-      temperature: 0.9,
-      topK: 1,
-      topP: 1,
-      maxOutputTokens: 2048,
-    };
-
-    const safetySettings = [
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-    ];
-
-    const parts = [
-      {
-        text: `
-        Title: ${title}
-        Tag: ${tag}
-        Description: ${description}
-
-        Generate a creative and attractive content based on the provided title, tag, and description.
-        title not more than 10 words.
-        tag should be one word.
-        description should professional, attractive not more than 50 words.
-        give me the title ,tag,description sperately so i can easily figure out 
-        `,
-      },
-    ];
-
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts }],
-      generationConfig,
-      safetySettings,
+    console.log("Starting content generation...");
+    
+    // Use gemini-1.5-flash (stable and reliable)
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-3-flash-preview"
     });
+
+    const prompt = `Generate creative blog content based on these inputs:
+
+Title: ${title}
+Tag: ${tag}  
+Description: ${description}
+
+Create improved versions following these rules:
+- Title: Maximum 10 words, catchy and professional
+- Tag: Single word only
+- Description: 30-50 words, engaging and professional
+
+Return ONLY in this exact format:
+**Title:** [improved title here]
+
+**Tag:** [single tag word here]
+
+**Description:** [improved description here]`;
+
+    console.log("Calling Gemini API...");
+    
+    const result = await model.generateContent(prompt);
     const response = result.response;
-    return response.text();
+    const text = response.text();
+    
+    console.log("Generated text:", text);
+    return text;
+    
   } catch (error) {
     console.error("Error generating creative text:", error);
+    console.error("Error message:", error.message);
     throw error;
   }
 }
-
 module.exports = router;
