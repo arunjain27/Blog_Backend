@@ -1,6 +1,8 @@
 const Database_Connection = require("../Database_Connection/Db.js");
 Database_Connection(); //---- DATABASE_CONNECTION  ----//
 
+const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
+
 const express = require("express");
 const router = express.Router();
 const NodeCache = require("node-cache");
@@ -14,7 +16,6 @@ const multer = require("multer");
 const { Readable } = require("stream");
 
 const MODEL_NAME = process.env.MODEL_NAME;
-const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
 const axios = require("axios");
 const jwt = require("jsonwebtoken");
 const bcryptjs = require("bcryptjs");
@@ -190,8 +191,8 @@ router.post("/get", Middleware_fun, async (req, res) => {
   }
 });
 
-// all the blog post
-router.post("/allpost", cacheMiddleware, Middleware_fun, async (req, res) => {
+// all the blog post with pagination support
+router.post("/allpost", Middleware_fun, async (req, res) => {
   try {
     let userid = req.user;
     let finalname = "none";
@@ -202,8 +203,33 @@ router.post("/allpost", cacheMiddleware, Middleware_fun, async (req, res) => {
         finalname = user.name;
       }
     }
-    const sortedBlogs = await Blog_Schema.find().sort({ date: -1 }).exec();
-    res.json({ userblog: sortedBlogs, username: finalname });
+    
+    // Pagination support
+    const page = parseInt(req.body.page) || 1;
+    const limit = parseInt(req.body.limit) || 12;
+    const skip = (page - 1) * limit;
+    
+    // Get total count for pagination
+    const totalBlogs = await Blog_Schema.countDocuments();
+    const totalPages = Math.ceil(totalBlogs / limit);
+    
+    // Fetch paginated blogs
+    const sortedBlogs = await Blog_Schema.find()
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+    
+    res.json({ 
+      userblog: sortedBlogs, 
+      username: finalname,
+      pagination: {
+        currentPage: page,
+        totalPages: totalPages,
+        totalBlogs: totalBlogs,
+        hasMore: page < totalPages
+      }
+    });
   } catch (error) {
     console.error("Error occurred:", error);
     res.status(500).send("An error occurred");
@@ -218,6 +244,65 @@ const deleteImageFromCloudinary = async (publicId) => {
     console.error("Error deleting image:", error);
   }
 };
+
+// Get popular posts (most liked)
+router.get("/popular", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 5;
+    const popularBlogs = await Blog_Schema.find()
+      .sort({ "likes.length": -1, date: -1 })
+      .limit(limit)
+      .select("_id title image tag date name likes")
+      .exec();
+    res.json({ blogs: popularBlogs });
+  } catch (error) {
+    console.error("Error fetching popular posts:", error);
+    res.status(500).json({ message: "Error fetching popular posts" });
+  }
+});
+
+// Get categories/tags
+router.get("/categories", async (req, res) => {
+  try {
+    const categories = await Blog_Schema.distinct("tag");
+    res.json({ categories: categories.filter(Boolean) });
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    res.status(500).json({ message: "Error fetching categories" });
+  }
+});
+
+// Get blogs by tag/category
+router.post("/category/:tag", Middleware_fun, async (req, res) => {
+  try {
+    const tag = req.params.tag;
+    const page = parseInt(req.body.page) || 1;
+    const limit = parseInt(req.body.limit) || 12;
+    const skip = (page - 1) * limit;
+    
+    const totalBlogs = await Blog_Schema.countDocuments({ tag: tag });
+    const totalPages = Math.ceil(totalBlogs / limit);
+    
+    const blogs = await Blog_Schema.find({ tag: tag })
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+    
+    res.json({
+      userblog: blogs,
+      pagination: {
+        currentPage: page,
+        totalPages: totalPages,
+        totalBlogs: totalBlogs,
+        hasMore: page < totalPages
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching posts by category:", error);
+    res.status(500).json({ message: "Error fetching posts by category" });
+  }
+});
 
 router.delete("/:id", async (req, res) => {
   try {
@@ -386,24 +471,41 @@ router.get("/:id", async (req, res) => {
 
 router.post("/generateText", async (req, res) => {
   try {
+    console.log("=== API KEY CHECK ===");
+console.log("API_KEY_GEMINI from env:", process.env.API_KEY_GEMINI);
+console.log("API_KEY_GEMINI length:", process.env.API_KEY_GEMINI?.length);
+console.log("====================");
     const { title, tag, description } = req.body;
+    
+    // Validate input
+    if (!title || !tag || !description) {
+      return res.status(400).json({ 
+        error: "Missing required fields: title, tag, or description" 
+      });
+    }
+    
     const str = await generateCreativeText(title, tag, description);
 
     let sections = str.split("\n\n");
 
-    let generatedTitle = sections[0].replace("**Title:** ", "");
-    let generatedTag = sections[1].replace("**Tag:** ", "");
-    let generatedDescription = sections[2].replace("**Description:** ", "");
+    let generatedTitle = sections[0].replace("**Title:** ", "").replace("**Title:**", "").trim();
+    let generatedTag = sections[1].replace("**Tag:** ", "").replace("**Tag:**", "").trim();
+    let generatedDescription = sections[2].replace("**Description:** ", "").replace("**Description:**", "").trim();
 
-    res
-      .status(200)
-      .json({ generatedTitle, generatedTag, generatedDescription });
+    res.status(200).json({ 
+      generatedTitle, 
+      generatedTag, 
+      generatedDescription 
+    });
   } catch (error) {
-    console.error("Error occurred:", error);
-    res.status(500).json({ error: "An error occurred" });
+    console.error("Error in /generateText route:", error);
+    res.status(500).json({ 
+      error: "Failed to generate text",
+      message: error.message,
+      details: "Please check your API key and quota limits"
+    });
   }
 });
-
 router.post("/like", Middleware_fun, async (req, res) => {
   try {
     const { blogId } = req.body;
@@ -469,7 +571,15 @@ router.post("/comment", Middleware_fun, async (req, res) => {
     });
 
     await newComment.save();
-    res.status(201).json({ comment: newComment });
+    
+    // Populate user field before sending response
+    const populatedComment = await Comment.findById(newComment._id)
+      .populate("user", "name")
+      .exec();
+    
+    res.status(201).json({ 
+      comment: populatedComment
+    });
   } catch (error) {
     console.error("Error occurred:", error);
     res
@@ -574,64 +684,46 @@ router.put("/update/:id", Middleware_fun, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
 async function generateCreativeText(title, tag, description) {
   try {
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
-    const generationConfig = {
-      temperature: 0.9,
-      topK: 1,
-      topP: 1,
-      maxOutputTokens: 2048,
-    };
-
-    const safetySettings = [
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-    ];
-
-    const parts = [
-      {
-        text: `
-        Title: ${title}
-        Tag: ${tag}
-        Description: ${description}
-
-        Generate a creative and attractive content based on the provided title, tag, and description.
-        title not more than 10 words.
-        tag should be one word.
-        description should professional, attractive not more than 50 words.
-        give me the title ,tag,description sperately so i can easily figure out 
-        `,
-      },
-    ];
-
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts }],
-      generationConfig,
-      safetySettings,
+    console.log("Starting content generation...");
+    
+    // Use gemini-1.5-flash (stable and reliable)
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-3-flash-preview"
     });
+
+    const prompt = `Generate creative blog content based on these inputs:
+
+Title: ${title}
+Tag: ${tag}  
+Description: ${description}
+
+Create improved versions following these rules:
+- Title: Maximum 10 words, catchy and professional
+- Tag: Single word only
+- Description: 30-50 words, engaging and professional
+
+Return ONLY in this exact format:
+**Title:** [improved title here]
+
+**Tag:** [single tag word here]
+
+**Description:** [improved description here]`;
+
+    console.log("Calling Gemini API...");
+    
+    const result = await model.generateContent(prompt);
     const response = result.response;
-    return response.text();
+    const text = response.text();
+    
+    console.log("Generated text:", text);
+    return text;
+    
   } catch (error) {
     console.error("Error generating creative text:", error);
+    console.error("Error message:", error.message);
     throw error;
   }
 }
-
 module.exports = router;
