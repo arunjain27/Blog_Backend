@@ -1,5 +1,4 @@
 const Database_Connection = require("../Database_Connection/Db.js");
-Database_Connection(); //---- DATABASE_CONNECTION  ----//
 
 const API_KEY_GEMINI = process.env.API_KEY_GEMINI;
 
@@ -32,7 +31,10 @@ const validationResult = express_validator.validationResult;
 
 //----  SIGNUP REQUEST    ----//
 router.post("/signup", createValidator, async (req, res) => {
+
   try {
+    await Database_Connection();
+
     const { name, email, password } = req.body;
     const Encrypted_Password = await bcryptjs.hash(password, numSaltRounds);
     const userDetails = new User({
@@ -59,6 +61,8 @@ router.post("/signup", createValidator, async (req, res) => {
 //----  SIGNIN REQUEST    ----//
 router.post("/signin", loginValidator, async (req, res) => {
   try {
+    await Database_Connection();
+
     const errors = validationResult(req);
     console.log(errors);
     if (!errors.isEmpty()) {
@@ -103,6 +107,8 @@ router.post(
   upload.single("image"),
   async (req, res) => {
     try {
+      await Database_Connection();
+
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded." });
       }
@@ -175,6 +181,8 @@ const cacheMiddleware = (req, res, next) => {
 //----   ALL_DATA REQUEST   ----//
 router.post("/get", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     let id = req.user;
     let finalname = "none";
     if (id != "none") {
@@ -194,6 +202,8 @@ router.post("/get", Middleware_fun, async (req, res) => {
 // all the blog post with pagination support
 router.post("/allpost", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     let userid = req.user;
     let finalname = "none";
 
@@ -239,6 +249,7 @@ router.post("/allpost", Middleware_fun, async (req, res) => {
 // -----  DELETE  REQUEST    -----//
 const deleteImageFromCloudinary = async (publicId) => {
   try {
+
     const result = await cloudinary.uploader.destroy(publicId);
   } catch (error) {
     console.error("Error deleting image:", error);
@@ -248,6 +259,8 @@ const deleteImageFromCloudinary = async (publicId) => {
 // Get popular posts (most liked)
 router.get("/popular", async (req, res) => {
   try {
+    await Database_Connection();
+
     const limit = parseInt(req.query.limit) || 5;
     const popularBlogs = await Blog_Schema.find()
       .sort({ "likes.length": -1, date: -1 })
@@ -264,6 +277,8 @@ router.get("/popular", async (req, res) => {
 // Get categories/tags
 router.get("/categories", async (req, res) => {
   try {
+    await Database_Connection();
+
     const categories = await Blog_Schema.distinct("tag");
     res.json({ categories: categories.filter(Boolean) });
   } catch (error) {
@@ -275,6 +290,8 @@ router.get("/categories", async (req, res) => {
 // Get blogs by tag/category
 router.post("/category/:tag", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     const tag = req.params.tag;
     const page = parseInt(req.body.page) || 1;
     const limit = parseInt(req.body.limit) || 12;
@@ -306,6 +323,8 @@ router.post("/category/:tag", Middleware_fun, async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
+    await Database_Connection();
+
     const id = req.params.id;
     const blogPost = await Blog_Schema.findOne({ _id: id });
 
@@ -328,6 +347,8 @@ router.delete("/:id", async (req, res) => {
 // -----  UPDATE  REQUEST    -----//
 router.get("/blog/:id", async (req, res) => {
   try {
+    await Database_Connection();
+
     const blogId = req.params.id;
     const blog = await Blog_Schema.findById(blogId)
       .populate("user", "name")
@@ -370,6 +391,8 @@ router.get("/blog/:id", async (req, res) => {
 
 router.put("/:id", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     const { text } = req.body;
     const comment = await Comment.findById(req.params.id);
     if (!comment) return res.status(404).json({ message: "Comment not found" });
@@ -387,6 +410,8 @@ router.put("/:id", Middleware_fun, async (req, res) => {
 
 router.post("/newpost", async (req, res) => {
   try {
+    await Database_Connection();
+
     const { title, tag, description } = req.body;
     const prompt =
       "Improve the title blog post: , improve the english , looks more attractive ,creative and professional";
@@ -416,6 +441,8 @@ const genAI = new GoogleGenerativeAI(API_KEY_GEMINI);
 
 router.put("/comment/:id", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     const commentId = req.params.id;
     const userId = req.user;
     const { text } = req.body;
@@ -439,6 +466,8 @@ router.put("/comment/:id", Middleware_fun, async (req, res) => {
 
 router.delete("/comment/:id", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     const comment = await Comment.findById(req.params.id).populate("user");
     if (!comment) return res.status(404).json({ message: "Comment not found" });
 
@@ -458,6 +487,8 @@ router.delete("/comment/:id", Middleware_fun, async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
+    await Database_Connection();
+
     const blog = await Blog.findById(req.params.id).populate({
       path: "comments",
       populate: { path: "user", select: "name" },
@@ -471,6 +502,8 @@ router.get("/:id", async (req, res) => {
 
 router.post("/generateText", async (req, res) => {
   try {
+    await Database_Connection();
+
     console.log("=== API KEY CHECK ===");
 console.log("API_KEY_GEMINI from env:", process.env.API_KEY_GEMINI);
 console.log("API_KEY_GEMINI length:", process.env.API_KEY_GEMINI?.length);
@@ -508,6 +541,8 @@ console.log("====================");
 });
 router.post("/like", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     const { blogId } = req.body;
     const userId = req.user;
 
@@ -555,6 +590,8 @@ router.post("/like", Middleware_fun, async (req, res) => {
 
 router.post("/comment", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     const { blogId, text } = req.body;
     const userId = req.user;
     if (!userId) {
@@ -590,6 +627,8 @@ router.post("/comment", Middleware_fun, async (req, res) => {
 
 router.post("/like-dislike-comment", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     const { commentId, type } = req.body;
     const userId = req.user;
     const comment = await Comment.findById(commentId);
@@ -645,6 +684,8 @@ router.post("/like-dislike-comment", Middleware_fun, async (req, res) => {
 
 router.get("/notifications", Middleware_fun, async (req, res) => {
   try {
+    await Database_Connection();
+
     const userId = req.user;
 
     const notifications = await Notification.find({ user: userId }).sort({
@@ -663,6 +704,8 @@ router.put("/update/:id", Middleware_fun, async (req, res) => {
   const { title, tag, description } = req.body;
 
   try {
+    await Database_Connection();
+
     const blog = await Blog_Schema.findById(blogId);
     if (!blog) {
       return res.status(404).json({ message: "Blog not found" });
